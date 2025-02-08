@@ -31,7 +31,7 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.1", author: "Mao")]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.2", author: "Mao")]
     public class AloaloIslandScript
     {   
         [UserSetting("指路时使用的颜色 => 类型: 立即前往")]
@@ -836,8 +836,9 @@ namespace TsingNamespace.AloaloIsland
         {
             //Boss1整个战斗会多次读条捕食气泡网，需要做标识
             //++boss1_bubbleNetCastingCount != 2 || 
-            if(await DelayMillisecond(5500)){
+            if(await DelayMillisecond(5500+500)){
                 //短暂延迟,确保debuff被赋予完成
+                //2025.2.8 延长到6000,5500太极限了，有时候小怪还没完成buff数据的更新
                 return;
             }
             boss1_phaseAfterMob = true;
@@ -870,7 +871,7 @@ namespace TsingNamespace.AloaloIsland
             //2.查找小怪的debuff情况 , 根据旋转角度排序, - 0.5 π 为第一个 小怪DataId为16545,小怪身上的泡泡DebuffId为3745
             uint mobDataId1 = 16545;
             uint mobDataId2 = 16552;
-            uint bubbleDebuffIdOnMob =3745;
+            uint bubbleDebuffIdOnMob = 3745;
             IEnumerable<IGameObject> _mobs1 = accessory.GetEntitiesByDataId(mobDataId1);
             IEnumerable<IGameObject> _mobs2 = accessory.GetEntitiesByDataId(mobDataId2);
             IEnumerable<IGameObject> mobs = _mobs1.Union(_mobs2);
@@ -878,10 +879,11 @@ namespace TsingNamespace.AloaloIsland
             IEnumerable<IGameObject> mobsGetbubbleDebuff = mobs.Where(obj => obj is IGameObject gameObject && mobIdsGetbubbleDebuff.Contains(gameObject.EntityId));
 
             List<Vector3> mobsIndex = myDebuffId == bubbleDebuffId 
-                                        ? mobs.Except(mobsGetbubbleDebuff).Select(obj => (obj?.Position) ?? new (0,0,0)).ToList()
-                                        : mobsGetbubbleDebuff.Select(obj => (obj?.Position) ?? new (0,0,0)).ToList();
+                                        ? mobs.Except(mobsGetbubbleDebuff).Select(obj => (obj?.Position) ?? new (0,1,0)).ToList()
+                                        : mobsGetbubbleDebuff.Select(obj => (obj?.Position) ?? new (0,1,0)).ToList();
             mobsIndex = mobsIndex.OrderBy(v3 => (Math.Round(MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI) < 0 ? MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI : MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI)).ToList();
             //3.确定自己要引导哪个小怪，获得该先去哪个数字点处理分散
+            accessory.Log.Debug($"Boss 1 Second Spring Crystals Safe Zone Draw : mobsIndex.Count => {mobsIndex.Count}");
             Vector3 myMob = mobsIndex.Count > 0 
                             ? (isMeFirst ? mobsIndex[0] : mobsIndex[mobsIndex.Count -1])
                             : new (0,0,0) ;
