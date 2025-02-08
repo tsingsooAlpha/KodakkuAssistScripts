@@ -2253,7 +2253,7 @@ namespace TsingNamespace.AloaloIsland
             //绘制第二轮飞镖指路
             List<float[]> myPointsList = new List<float[]>();
             myPointsList.Add(new float[]{originPos.X,originPos.Y,originPos.Z,0,3300});
-            myPointsList.Add(new float[]{myStartPoint.X,myStartPoint.Y,myStartPoint.Z,0,5000});
+            myPointsList.Add(new float[]{myStartPoint.X,myStartPoint.Y,myStartPoint.Z,0,5300});
             myPointsList.Add(new float[]{myEndPoint.X,myEndPoint.Y,myEndPoint.Z,0,5000});
             MultiDisDraw(myPointsList,accessory);
             accessory.Log.Debug($"Boss 3 Second Dart Board : my order number in party => {1 + accessory.GetMyIndex()}");
