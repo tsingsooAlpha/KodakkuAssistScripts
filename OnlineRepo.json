@@ -2,9 +2,9 @@
     {
         "Name": "阿罗阿罗岛绘图+指路",
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2632e",
-        "Version": "0.0.0.1",
+        "Version": "0.0.0.2",
         "Author": "Mao",
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland.cs",
-        "UpdateInfo": ""
+        "UpdateInfo": "1.修改了Boss1双马尾小怪身上泡泡debuff的获取时机，能更加稳定的获取了"
     }
 ]
