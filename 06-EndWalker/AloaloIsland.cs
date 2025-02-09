@@ -2243,8 +2243,8 @@ namespace TsingNamespace.AloaloIsland
                 List<uint> bullEyePlayers = accessory.whoGetStatusInParty(eyeStatusId);
                 isBullEyeNeedChange = bullEyePlayers.Count == 2 
                     && (
-                        accessory.GetIndexInParty(bullEyePlayers[0]) + accessory.GetIndexInParty(bullEyePlayers[0]) == 1 
-                        || accessory.GetIndexInParty(bullEyePlayers[0]) + accessory.GetIndexInParty(bullEyePlayers[0]) == 5
+                        accessory.GetIndexInParty(bullEyePlayers[0]) + accessory.GetIndexInParty(bullEyePlayers[1]) == 1 
+                        || accessory.GetIndexInParty(bullEyePlayers[0]) + accessory.GetIndexInParty(bullEyePlayers[1]) == 5
                         );
                 isMeGoLeft = isBullEyeNeedChange ? !isMeGoLeft : isMeGoLeft;
                 Vector3 _myStartPoint = isMeGoLeft ? noBurningChainsLeft_template : noBurningChainsRight_template;
