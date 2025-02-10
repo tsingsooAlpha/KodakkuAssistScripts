@@ -22,18 +22,29 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Statuses;
 //using System.Reflection;
 
-
 using Util = TsingNamespace.AloaloIsland.TsingUtilities;
 using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
-
-
 
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.2", author: "Mao")]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.3", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
+        const string noteStr =
+        """
+        基于猫猫窝攻略 ; Boss 1 默认采用融合法, 可前往用户设置修改.
+
+
+
+        0.0.0.3
+            1.添加 Boss 1 第一次水晶机制指路的依据类型 : 
+                融合法(RongHeFa), 南北法(NanBeiFa), 排队法(PaiDuiFa);
+            2.修改 Boss 2 面向指引颜色调整为和GuideColor_GoNow一致;
+            3.修改 Boss 2 面向指引绘图方式固定为Vfx;
+            4.添加 Boss 2 立体爆雷战术机制的相关指路内容;
+
+        """;
         [UserSetting("指路时使用的颜色 => 类型: 立即前往")]
         public ScriptColor GuideColor_GoNow { get; set; } = new() { V4 = new(0, 1, 1, 2) };
         [UserSetting("指路时使用的颜色 => 类型: 稍后前往")]
@@ -42,13 +53,17 @@ namespace TsingNamespace.AloaloIsland
         [UserSetting("指路时使用的颜色深度")]
         public float GuideColorDensity { get; set; } = 2;
 
-
+        [UserSetting("Boss 1 第一次水晶机制指路依据")]
+        public Boss1_WalkthroughEnum Boss1_Walkthrough { get; set; }
+        public enum Boss1_WalkthroughEnum { RongHeFa,NanBeiFa,PaiDuiFa }
 
         // Kod内部小队成员序号(与游戏内小队成员列表顺序无关，与指令/KTeam打开的窗口有关)与职能的对应关系。
         // 0-MT,1-H1,2-D1,3-D2
         // 小队成员序号序号从0开始
         [UserSetting("默认职能顺序")]
         public RoleMarksListEnum RoleMarks4 { get; set; }
+        public enum RoleMarksListEnum { MT_H1_D1_D2 }
+        public enum RoleMarkEnum { MT, H1, D1, D2 }
 
         // 用于存放触发器触发的时间戳
         private ConcurrentDictionary<string, long> invokeTimestamp = new ConcurrentDictionary<string, long>();
@@ -71,7 +86,7 @@ namespace TsingNamespace.AloaloIsland
         // Boss1 标记小泡泡机制走位顺逆时针
         private bool boss1_bubbleIsClockwise = false;
 
-        // Boos1 标记钢铁月环+大泡泡(标记的场地北侧靠近中间的两个泡泡的其中一个)
+        // Boss1 标记钢铁月环+大泡泡(标记的场地北侧靠近中间的两个泡泡的其中一个)
         private Vector3 boss1_twintidesBubbleType = new(0,0,0);
 
         // Boss1 标记是否已经到了小怪引导后的阶段
@@ -96,7 +111,7 @@ namespace TsingNamespace.AloaloIsland
 
         //Boss3 炸弹
         private uint boss3_bombsRound = 0;
-
+        //Boss3 炸弹到数字点距离信息
         private List<float[]> boss3_rad_distance = new List<float[]>
         {
             new float[]{-0.25f * MathF.PI,100},
@@ -104,24 +119,10 @@ namespace TsingNamespace.AloaloIsland
             new float[]{0.75f * MathF.PI,100},
             new float[]{-0.75f * MathF.PI,100}
         };
+        //Boss3 第二次转盘相关数据
         private List<float> boss3_fireSpreadRotation = new List<float>();
         private List<uint> boss3_burningChainsPlayers = new List<uint>();
         private bool boss3_isFireBallClockwise = false;
-
-
-
-
-        // 存放小队成员的Buff和Debuff类型(StatusID), 气泡网回声3743(泡泡), 气泡凝聚3788(止步)
-        // private Dictionary<int, string[]> partyMembersBuffsAndDebufs = new Dictionary<int, string[]>();
-
-
-
-        public enum RoleMarksListEnum { MT_H1_D1_D2 }
-        public enum RoleMarkEnum { MT, H1, D1, D2 }
-
-
-        
-
 
         public void Init(ScriptAccessory accessory)
         {
@@ -152,13 +153,10 @@ namespace TsingNamespace.AloaloIsland
             invokeTimestamp.Clear();
             cancellationTokenSource.Cancel();
             cancellationTokenSource = new CancellationTokenSource();
-
-
         }
 
         #region Mob1
         //给第一组小怪场地上的风圈，绘制危险区与危险区预提醒
-        //龙卷技能ID为35776，龙卷模型ID16590
         [ScriptMethod(name: "小怪 1 风圈 Mob 1 Tornado Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35776|35791)$"])]
         public void Mob1_TornadoDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
@@ -175,7 +173,6 @@ namespace TsingNamespace.AloaloIsland
 
 
         //第一组小怪螺旋尾35768(4.7s)提示
-        //绘制思路为在事件的EffectPosition位置绘制一个圆圈
         [ScriptMethod(name: "小怪 1 螺旋尾 Mob 1 Tail Screw Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35768|35785)$"])]
         public void Mob1_TailScrewDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
@@ -200,9 +197,6 @@ namespace TsingNamespace.AloaloIsland
 
         }
 
-
-
-
         //第一组小怪水化炮35773(4.7s)+驱逐35775(4.7s)+电漩涡35774(4.7s)<=三连,写在一块
         [ScriptMethod(name: "小怪 1 钢铁月环三连 Mob 1 Hydrocannon Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35773|35915)$"])]
         public void Mob1_HydrocannonDangerousZoneDraw(Event @event, ScriptAccessory accessory)
@@ -219,9 +213,6 @@ namespace TsingNamespace.AloaloIsland
             propDonut.Radian = 2 * (float)(Math.PI);
             propDonut.Delay = 13800;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Donut, propDonut);
-
-
-
         }
 
         //第一组小怪水球喷射35941(4.7s)击退方向提示
@@ -243,8 +234,6 @@ namespace TsingNamespace.AloaloIsland
         // boss1 钢铁月环预站位
         // boss1 愤怒之海分摊分撒范围示意
         // boss1 ID 需要修正的内容  泡泡的dataID,水墙的dataID,双马尾的dataID
-
-        // boss2 减算爆雷b指路
         // boss2 减算爆雷b指路中关于4雷的优化 如果第一组十字魔纹后4雷的层数不为2,则向左引导多吃一层再去最终位置
         #endregion
 
@@ -257,8 +246,7 @@ namespace TsingNamespace.AloaloIsland
                 return;
             };
             accessory.Log.Debug($"Actived! => Boss RemoveCombatant Initialize");
-
-            //由于是Init方法中有清楚时间戳记录的操作,延迟1秒,确保其他的同时触发方法被排除
+            //由于Init方法中有清除时间戳记录的操作,延迟1秒,确保其他的同时触发方法被排除
             await DelayMillisecond(1000);
             Init(accessory);
         }
@@ -334,14 +322,7 @@ namespace TsingNamespace.AloaloIsland
                 propRect.Color = accessory.Data.DefaultSafeColor.WithW(0.4f);
                 accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, propRect);
             };
-
-  
-
         }
-
-
-
-
 
         /*如何给第一次水晶分摊或者分散指定安全区;<=采用融合法
         泡泡buff指路,终点有两个,靠近boss或者少吹风;<=采用少吹风, 写起来比较简单
@@ -356,9 +337,7 @@ namespace TsingNamespace.AloaloIsland
         气泡网回声debuff=3743(泡泡), 气泡凝集debuff=3788(止步)
         选定目标水化弹debuff=3748(分散),选定目标水瀑debuff=3747(分摊)
         */
-
-
-        [ScriptMethod(name: "Boss 1 水晶指路(融合法) Boss 1 Spring Crystals Guide", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:35505"])]
+        [ScriptMethod(name: "Boss 1 水晶指路(默认融合法) Boss 1 Spring Crystals Guide", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:35505"])]
         public void Boss1_FirstSpringCrystalsGuide(Event @event, ScriptAccessory accessory)
         {
             accessory.Log.Debug($"Actived! => Boss 1 Spring Crystals Guide");
@@ -368,7 +347,7 @@ namespace TsingNamespace.AloaloIsland
             }
 
             //该机制的优先级
-            //(MT=0,D2=4,D1=3,H1=1)
+            //(MT=0,D2=3,D1=2,H1=1)
             int[] roleMarkPriority = new int[] { (int)RoleMarkEnum.MT, (int)RoleMarkEnum.D2, (int)RoleMarkEnum.D1, (int)RoleMarkEnum.H1 };
 
             //标记是否获得泡泡的debuff
@@ -387,16 +366,18 @@ namespace TsingNamespace.AloaloIsland
             //水晶模型ID
             uint springCrystalDataId1 = 16542;
             uint springCrystalDataId2 = 16549;
+            IEnumerable<IGameObject> _crystals1 = accessory.GetEntitiesByDataId(springCrystalDataId1);
+            IEnumerable<IGameObject> _crystals2 = accessory.GetEntitiesByDataId(springCrystalDataId2);
+            IEnumerable<IGameObject> crystalsList = _crystals1.Union(_crystals2);
 
             //我的目的地
-            //float[] myEndPosition = new float[] { 0, 0, 0 };
             Vector3 myEndPosition = new (0,0,0);
+            
 
             if (isMeGetBubbleDebuff)
             {
                 //我是泡泡debuff,泡泡玩家无视分摊分散
                 //通常可以根据职能位置直接判断去哪个位置, 但是为了避免意外情况, 查找另外一个同样debuff的玩家, 是什么职能
-
                 //1.查找另外一个泡泡玩家,结果可能为null
                 List<uint> bubbleDebuffPlayers = accessory.whoGetStatusInPartyWithoutMe(bubbleDebuffId);
                 //2.确定去哪
@@ -409,29 +390,40 @@ namespace TsingNamespace.AloaloIsland
                     isMeGoToNorthWest = Array.IndexOf(roleMarkPriority, accessory.GetMyIndex())
                                         < Array.IndexOf(roleMarkPriority, accessory.GetIndexInParty(bubbleDebuffPlayers[0]));
                 }
-                //3.找到二麻水晶(-1.57)的对角
                 
-                IEnumerable<IGameObject> _springCrystals1 = accessory.GetEntitiesByDataId(springCrystalDataId1).Where(obj => obj!=null && obj.Rotation < - 0.1);
-                IEnumerable<IGameObject> _springCrystals2 = accessory.GetEntitiesByDataId(springCrystalDataId2).Where(obj => obj!=null && obj.Rotation < - 0.1);
-                
-                IEnumerable<IGameObject> springCrystals = _springCrystals1.Union(_springCrystals2);
-                Vector2 myIndexPos = isMeGoToNorthWest ? new (0,-10) : new (0,10);
+                /*
+                3.找到二麻水晶(-1.57)的对角
+                融合法和南北法的泡泡,无脑去自己负责半场的二麻水晶对角
+                通常排队法西北组人员基本也符合去北半场找二麻水晶对角的规则
+                有两种情况例外，近中水晶为竖水晶，位置在右下侧或者左上侧
+                */
+                IEnumerable<IGameObject> springCrystals = crystalsList.Where(obj => obj.Rotation < -1);
                 //通过坐标Z值将水晶进行排序
                 springCrystals = isMeGoToNorthWest 
-                        ? springCrystals.OrderBy(obj => (obj?.Position ?? new (100,100,100)).Z)
-                        : springCrystals.OrderByDescending(obj => (obj?.Position ?? new (-100,-100,-100)).Z);
-                if(springCrystals.Count() > 0){
-                    //Vector3 springCrystalPos = springCrystals[0]?.Position??new(0,0,0) ;
-                    Vector3 springCrystalPos = ((springCrystals.ToList())[0]?.Position) ?? new (0,0,0);
-                    myEndPosition = Util.RotatePointInFFXIVCoordinate(springCrystalPos
-                        ,new Vector3(Math.Sign(springCrystalPos.X) * 10, springCrystalPos.Y, Math.Sign(springCrystalPos.Z) * 10)
-                        ,Math.PI);
+                        ? springCrystals.OrderBy(obj => obj.Position.Z)
+                        : springCrystals.OrderByDescending(obj => obj.Position.Z);
+
+                //排队法相关内容,排队法例外情况,近中水晶为竖水晶，位置在右下侧或者左上侧(坐标乘积为正数)
+                bool isNanBeiFa = Boss1_Walkthrough != Boss1_WalkthroughEnum.PaiDuiFa;
+                accessory.Log.Debug($"Boss 1 Spring Crystals Guide : isNanBeiFa => {isNanBeiFa}");
+                List<IGameObject> _centreCrystal = crystalsList.Where(obj => obj.Rotation < -1 && Math.Abs(obj.Position.X) < 6 && Math.Abs(obj.Position.Z) < 6).ToList();
+                bool isNeedChange = !isNanBeiFa && _centreCrystal.Count > 0 && _centreCrystal[0].Position.X * _centreCrystal[0].Position.Z > 0;
+
+                int _count = springCrystals.Count();
+                Vector3 springCrystalPos = _count > 0 ? (springCrystals.ToList())[isNeedChange ? _count - 1 : 0].Position : new (0,0,0);
+                Vector3 _centre = new (Math.Sign(springCrystalPos.X) * 10, springCrystalPos.Y, Math.Sign(springCrystalPos.Z) * 10);
+                myEndPosition = Util.RotatePointInFFXIVCoordinate(springCrystalPos,_centre,MathF.PI);
+                if(!isNanBeiFa)
+                {
+                    //由于排队法要去一麻位置，但是找到的是二麻对角位置,需要将二麻的位置沿着X轴，向Y轴方向移动20
+                    myEndPosition = new (myEndPosition.X - Math.Sign(myEndPosition.X) * 20 ,myEndPosition.Y,myEndPosition.Z);
                 }
+
             }
             else
             {
+                //止步玩家的融合法采用了排队法
                 //我不是泡泡debuff, 通常会是止步debuff(也有可能是无buff)
-
                 uint anotherOneId = 0;
                 if (isPartyGetHydrofallDebuff)
                 {
@@ -471,32 +463,43 @@ namespace TsingNamespace.AloaloIsland
                                     < Array.IndexOf(roleMarkPriority, accessory.GetIndexInParty(anotherOneId));
                 }
                 myEndPosition = isMeGoToNorthWest ? new(16,0,16) : new (-16,0,-16);
-                //分摊要去在一麻区域的安全区, 分散要去二麻区域的安全区
+                bool isNanBeiFa = Boss1_Walkthrough == Boss1_WalkthroughEnum.NanBeiFa;
+                accessory.Log.Debug($"Boss 1 Spring Crystals Guide : isNanBeiFa => {isNanBeiFa}");
+                //排队法分摊要去在一麻区域的安全区, 分散要去二麻区域的安全区
                 foreach(Vector2 safePoint in boss1_springCrystalsSafePoints){
                     //通过安全区，查找位于该安全区的水晶的面向，判断是一麻还是二麻
-                    IEnumerable<IGameObject> _springCrystals1 = accessory.GetEntitiesByDataId(springCrystalDataId1).Where(obj => obj!=null && Math.Sign(obj.Position.X) == Math.Sign(safePoint.X) && Math.Sign(obj.Position.Z) == Math.Sign(safePoint.Y)) ;
-                    IEnumerable<IGameObject> _springCrystals2 = accessory.GetEntitiesByDataId(springCrystalDataId2).Where(obj => obj!=null && Math.Sign(obj.Position.X) == Math.Sign(safePoint.X) && Math.Sign(obj.Position.Z) == Math.Sign(safePoint.Y)) ;
+                    IEnumerable<IGameObject> _springCrystals1 = accessory.GetEntitiesByDataId(springCrystalDataId1).Where(obj => Math.Sign(obj.Position.X) == Math.Sign(safePoint.X) && Math.Sign(obj.Position.Z) == Math.Sign(safePoint.Y)) ;
+                    IEnumerable<IGameObject> _springCrystals2 = accessory.GetEntitiesByDataId(springCrystalDataId2).Where(obj => Math.Sign(obj.Position.X) == Math.Sign(safePoint.X) && Math.Sign(obj.Position.Z) == Math.Sign(safePoint.Y)) ;
                     IEnumerable<IGameObject> springCrystals = _springCrystals1.Union(_springCrystals2);
                     // IEnumerable<IGameObject> springCrystals = accessory.GetEntitiesByDataId(springCrystalDataId1)
                     //     .Where(obj => obj != null 
                     //     && Math.Sign(obj.Position.X) == Math.Sign(safePoint.X)
                     //     && Math.Sign(obj.Position.Z) == Math.Sign(safePoint.Y));
                     //accessory.Log.Debug($"Boss 1 First Spring Crystals Guide : springCrystals.Count() => {springCrystals.Count()}");
-                   
+
+                    
                     if(springCrystals.Count() > 0 && (Math.Sign(Math.Round((springCrystals.ToList())[0].Rotation)) == (isPartyGetHydrofallDebuff ? 0 : -1)))
                     {   
                         //accessory.Log.Debug($"Boss 1 Spring Crystals Guide : springCrystals[0] => {(springCrystals.ToList())[0].Position},{(springCrystals.ToList())[0].Rotation}");
-                        //西北玩家的点应该更加靠近 -16,0,-16 ,如果当前安全区的点比myEndPosition更靠近,则录入
-                        Vector3 startPoint = isMeGoToNorthWest ? new( -16, 0, -16 ) : new ( 16, 0, 16 );
-                        myEndPosition = Math.Sqrt(Math.Pow(safePoint.X - startPoint.X, 2) + Math.Pow(safePoint.Y - startPoint.Z, 2))
-                                        < Math.Sqrt(Math.Pow(myEndPosition.X - startPoint.X, 2) + Math.Pow(myEndPosition.Z - startPoint.Z, 2))
-                                        ? new (safePoint.X,0,safePoint.Y)
-                                        :myEndPosition;
+                        if(!isNanBeiFa)
+                        {
+                            //融合法或者排队法
+                            //西北玩家的点应该更加靠近 -16,0,-16 ,如果当前安全区的点比myEndPosition更靠近,则录入
+                            Vector3 startPoint = isMeGoToNorthWest ? new( -16, 0, -16 ) : new ( 16, 0, 16 );
+                            myEndPosition = Math.Sqrt(Math.Pow(safePoint.X - startPoint.X, 2) + Math.Pow(safePoint.Y - startPoint.Z, 2))
+                                            < Math.Sqrt(Math.Pow(myEndPosition.X - startPoint.X, 2) + Math.Pow(myEndPosition.Z - startPoint.Z, 2))
+                                            ? new (safePoint.X,0,safePoint.Y)
+                                            :myEndPosition;
+                        }
+                        else
+                        {
+                            //南北法
+                            //符合南北相对位置
+                            bool isAtCorrectHalf = Math.Sign(Math.Round(safePoint.Y)) == (isMeGoToNorthWest ? -1 : 1);
+                            myEndPosition = isAtCorrectHalf ? new (safePoint.X,0,safePoint.Y) : myEndPosition;
+                        }
                     }
-                    
-
-                
-                    
+                  
                 }
                 
             }
@@ -523,25 +526,24 @@ namespace TsingNamespace.AloaloIsland
             
             DrawPropertiesEdit propFan = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(2.55f),16000,false);
             propFan.Offset = new(0, 0, -1.3f);
-            propFan.Radian = (float)(Math.PI);
+            propFan.Radian = MathF.PI;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Fan, propFan);
 
             DrawPropertiesEdit propDisplacement = accessory.GetDrawPropertiesEdit(propFan.Owner,new(2, 2.3f),propFan.DestoryAt,false);
             propDisplacement.Offset = new(0, 0, -1.3f);
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Displacement, propDisplacement);
-
         }
+        
         /*
         吹气泡+分摊分散指路
         吹气泡有两种情况， 通过检查最靠近右下角(20,0,20)的泡泡. 如果x<z, 则为逆时针路线. 如果x>z则为顺时针路线
         每个人的起点为每个四分之一场地, 靠近场中的点
         三个水圈(直径10),第三个水圈放下时buff1触发; 短暂延迟后下一组的第一个水圈,在放下第二个水圈的同时,buff2触发
-        Boos1在完成分摊分散buff赋予+召唤泡泡后, boss本体会开始读条水化爆弹35536(1.9s), 以该读条作为吹气泡+分摊分散指路的开始点
+        Boss1在完成分摊分散buff赋予+召唤泡泡后, boss本体会开始读条水化爆弹35536(1.9s), 以该读条作为吹气泡+分摊分散指路的开始点
         */
         [ScriptMethod(name: "Boss 1 小泡泡+分摊分散指路 Boss 1 Blowing Bubbles Guide", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35536|35489)$"])]
         public void Boss1_BlowingBubblesGuide(Event @event, ScriptAccessory accessory)
         {
-
             if(IsInSuppress(60000, nameof(Boss1_BlowingBubblesGuide)))
             {
                 return;
@@ -713,7 +715,6 @@ namespace TsingNamespace.AloaloIsland
             }
             
             DrawPropertiesEdit propRect = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(10, 20),6600-1400,false);
-            //propRect.ScaleMode = ScaleMode.ByTime;
             propRect.Delay = 4000 + 1400;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, propRect);
         }
@@ -729,7 +730,6 @@ namespace TsingNamespace.AloaloIsland
         2.拐点, 纵向移动躲避第二段钢铁月环
         3.终点, 横向移动躲避第二段水墙
         */
-
         [ScriptMethod(name: "Boss 1 钢铁月环指路 Boss 1 Twintides Guide", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35532|35534|35559|35561)$"])]
         public void Boss1_TwintidesGuide(Event @event, ScriptAccessory accessory)
         {
@@ -820,8 +820,6 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 1 Twintides Guide : isNorth_leftWaterFirst => {isNorth_leftWaterFirst}");
             accessory.Log.Debug($"Boss 1 Twintides Guide : isMeGoToNorth => {isMeGoToNorth}");
             accessory.Log.Debug($"Boss 1 Twintides Guide : isMeGetHydrofallDebuff => {isMeGetHydrofallDebuff}");
-            
-
         }
 
 
@@ -1030,9 +1028,6 @@ namespace TsingNamespace.AloaloIsland
                 ishydrofallSameGroup ?new (7,7) :new (-15,15),
             };
 
-
-            
-
             long delay_firstMech = 0;
             long dispaly_firstMech = 8000;
             long delay_secondMech = 0;
@@ -1054,15 +1049,6 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 1 Angry Seas Hydrop Guide : ishydrofallSameGroup=> {ishydrofallSameGroup}");
             accessory.Log.Debug($"Boss 1 Angry Seas Hydrop Guide : myStartPoint => {myStartPoint}");
             accessory.Log.Debug($"Boss 1 Angry Seas Hydrop Guide : myEndPoint => {myEndPoint}");
-
-            
-
-
-
-
-
-
-
         }
 
         [ScriptMethod(name: "Boss 1 愤怒之海 水晶踩塔指路 Boss 1 Angry Seas Crystals Guide", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16541|16548)$"])]
@@ -1141,18 +1127,10 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 1 Angry Seas Crystals Guide : isCrystalOnNorthSide => {isCrystalOnNorthSide}");
             accessory.Log.Debug($"Boss 1 Angry Seas Crystals Guide : myStartPoint => {myStartPoint}");
             accessory.Log.Debug($"Boss 1 Angry Seas Crystals Guide : myEndPoint => {myEndPoint}");
-
-            
         }
-
-
-        
-        
-        
         #endregion
 
         #region Mob2
-
         [ScriptMethod(name: "小怪 2 止步龙卷 Mob 2 Stop Tornado", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35917|35795)$"])]
         public void Mob2_StopTornado(Event @event, ScriptAccessory accessory)
         {
@@ -1182,7 +1160,7 @@ namespace TsingNamespace.AloaloIsland
         左侧未分析StatusID3729 StackCount154 Param666
         
 
-        Boos身上的3倍旋转角StatusID3938
+        Boss身上的3倍旋转角StatusID3938
         Boss身上的5倍旋转角StatusID3939
 
         在玩家身上3倍旋转角StatusID3721
@@ -1214,6 +1192,7 @@ namespace TsingNamespace.AloaloIsland
             boss2_bossId = @event.GetSourceId();
             boss2_InfernoTheoremCasted =true;
             boss2_InfernoTheoremCastingCount++;
+            boss2_ArcaneMinesList.Clear();
             accessory.Log.Debug($"Actived! => Boss 2 Id updated {boss2_bossId}");
         }
 
@@ -1227,7 +1206,6 @@ namespace TsingNamespace.AloaloIsland
             {
                 return;
             }
-
             //accessory.Log.Debug($"Actived! => Boss 2 Arcane Blight Safe Zone");
             float finalAngle = @event.GetSourceRotation() - MathF.PI;
             DrawPropertiesEdit dpFan = accessory.GetDrawPropertiesEdit(@event.GetSourceId(), new(20), 4500, true);
@@ -1235,17 +1213,12 @@ namespace TsingNamespace.AloaloIsland
             dpFan.Rotation = - MathF.PI;
             dpFan.Color = accessory.Data.DefaultSafeColor.WithW(2.0f);
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Fan, dpFan);
-
             //accessory.Log.Debug($"Boss 2 Arcane Blight Safe Zone : finalAngle => {finalAngle}");
-
-
-
         }
 
         [ScriptMethod(name: "Boss 2 双光球指路 Boss 2 double arcane globe guide", eventType: EventTypeEnum.StatusAdd, eventCondition: ["StatusID:regex:^(3726|3727|3728|3729)$"])]
         public async void Boss2_doubleArcaneGlobeGuide(Event @event, ScriptAccessory accessory)
         {
-            
             //7秒后场地黄白箭头和光球刷新
             if(@event.GetTargetId() != accessory.Data.Me || !boss2_InfernoTheoremCasted || await DelayMillisecond(7000))
             {
@@ -1312,9 +1285,9 @@ namespace TsingNamespace.AloaloIsland
                 }
             }
 
-
-            accessory.DrawTurnTowards(arcaneGlobePos1,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(0,5500),accessory.Data.DefaultSafeColor,true);
-            accessory.DrawTurnTowards(arcaneGlobePos2,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(9500,5500),accessory.Data.DefaultSafeColor,true);
+            Vector4 color = GuideColor_GoNow.V4;
+            accessory.DrawTurnTowards(arcaneGlobePos1,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(0,5500),color.WithW(color.W + 2),true);
+            accessory.DrawTurnTowards(arcaneGlobePos2,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(9500,5500),color.WithW(color.W + 2),true);
             
             accessory.Log.Debug($"Boss 2 double arcane globe guide: arcaneGlobePos1 => {arcaneGlobePos1}");
             accessory.Log.Debug($"Boss 2 double arcane globe guide: arcaneGlobePos2 => {arcaneGlobePos2}");
@@ -1324,8 +1297,6 @@ namespace TsingNamespace.AloaloIsland
         [ScriptMethod(name: "Boss 2 高精度光弹指路 Boss 2 Targeted Light Guide", eventType: EventTypeEnum.TargetIcon, eventCondition: ["Id:regex:^(01ED|01EE)$"])]
         public void Boss2_TargetedLightGuide(Event @event, ScriptAccessory accessory)
         {
-            
-
             //玩家会多次获得该ICON,注意区分次数
             if(@event.GetTargetId() != accessory.Data.Me)
             {
@@ -1351,49 +1322,41 @@ namespace TsingNamespace.AloaloIsland
             {
                 return;
             }
-
-            
             accessory.Log.Debug($"Actived! => Boss 2 Targeted Light Guide");
-            
 
             /*
-                Get TargetIcon Id
-                在玩家身上时
-                顺时针旋转 01ED
-                逆时针旋转 01EE
+            Get TargetIcon Id
+            在玩家身上时
+            顺时针旋转 01ED
+            逆时针旋转 01EE
 
-                在玩家身上3倍旋转角StatusID3721
-                在玩家身上5倍旋转角StatusID3790
+            在玩家身上3倍旋转角StatusID3721
+            在玩家身上5倍旋转角StatusID3790
 
-                正面未分析StatusID3726 StackCount151 Param663
-                背面未分析StatusID3727 StackCount152 Param664
-                右侧未分析StatusID3728 StackCount153 Param665
-                左侧未分析StatusID3729 StackCount154 Param666
+            正面未分析StatusID3726 StackCount151 Param663
+            背面未分析StatusID3727 StackCount152 Param664
+            右侧未分析StatusID3728 StackCount153 Param665
+            左侧未分析StatusID3729 StackCount154 Param666
 
-                移动命令前StatusID3715
-                移动命令后StatusID3716
-                移动命令左StatusID3717
-                移动命令右StatusID3718
+            移动命令前StatusID3715
+            移动命令后StatusID3716
+            移动命令左StatusID3717
+            移动命令右StatusID3718
 
-                      
-                要旋转多少角度才能把缺口对象目标(用于处理光球)
-                正面未分析StatusID3726 => 0
-                背面未分析StatusID3727 => PI
-                右侧未分析StatusID3728 => -0.5PI
-                左侧未分析StatusID3729 => 0.5PI
+                    
+            要旋转多少角度才能把缺口对象目标(用于处理光球)
+            正面未分析StatusID3726 => 0
+            背面未分析StatusID3727 => PI
+            右侧未分析StatusID3728 => -0.5PI
+            左侧未分析StatusID3729 => 0.5PI
 
 
-                要你旋转多少角度才能把强制移动对向目标
-                移动命令前StatusID3715 => 0
-                移动命令后StatusID3716 => PI
-                移动命令左StatusID3717 => 0.5PI
-                移动命令右StatusID3718 => -0.5PI
-
-        
+            要你旋转多少角度才能把强制移动对向目标
+            移动命令前StatusID3715 => 0
+            移动命令后StatusID3716 => PI
+            移动命令左StatusID3717 => 0.5PI
+            移动命令右StatusID3718 => -0.5PI
             */
-
-
-
             object myTowardsObj = null;
             List<float> baseAngles = new List<float>();
             baseAngles.Add(0);
@@ -1414,7 +1377,6 @@ namespace TsingNamespace.AloaloIsland
                 baseAngles.Add(-0.5f * MathF.PI);
             }
 
-
             uint clockWiseIconId = 0x01ED;
             uint threeTimesStatusId = 3721;
 
@@ -1423,21 +1385,21 @@ namespace TsingNamespace.AloaloIsland
             //非3倍角
             bool isMeGetFive = !accessory.isMeGetStatus(threeTimesStatusId);
             float myBaseAngle = baseAngles[(int)(myStatusId - myStatusOffset)];
-            
 
-
-            //判断最终玩家的缺口会因为旋转角+顺逆时针，呈现出怎样的旋转方式
-            //如果是顺时针旋转,则缺口角度将旋转 +0.5PI, 那么玩家的策略就是把缺口对象目标的角度 - 0.5PI
-            //如果是逆时针旋转,则缺口角度将旋转 -0.5PI, 那么玩家的策略就是把缺口对象目标的角度 + 0.5PI
-
+            /*
+            判断最终玩家的缺口会因为旋转角+顺逆时针，呈现出怎样的旋转方式
+            如果是顺时针旋转,则缺口角度将旋转 +0.5PI, 那么玩家的策略就是把缺口对象目标的角度 - 0.5PI
+            如果是逆时针旋转,则缺口角度将旋转 -0.5PI, 那么玩家的策略就是把缺口对象目标的角度 + 0.5PI
+            */
             float myModifyAngle = isMeGetFive 
                                     ? (isMeGetClockwiseIcon ? -0.5f * MathF.PI : 0.5f * MathF.PI)
                                     : (isMeGetClockwiseIcon ? 0.5f * MathF.PI : -0.5f * MathF.PI);
             float myFinalAngleTurnTowards = myBaseAngle + myModifyAngle;
 
-            
             Vector2 delay_destoryAt = myStatusId >= 3726 ? new(7000,4500) : new (2000,9000);
-            accessory.DrawTurnTowards(myTowardsObj,new(20,0.33f*MathF.PI,myFinalAngleTurnTowards),new(9,5f),delay_destoryAt,accessory.Data.DefaultSafeColor,true);
+            Vector4 _color = GuideColor_GoNow.V4;
+            Vector4 color = _color.WithW(_color.W + (myStatusId >= 3726 ? 2 : 0));
+            accessory.DrawTurnTowards(myTowardsObj,new(20,0.33f*MathF.PI,myFinalAngleTurnTowards),new(9,5f),delay_destoryAt,color,true);
 
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : myTowardsObj => {myTowardsObj}");
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : isMeGetClockwiseIcon => {isMeGetClockwiseIcon}");
@@ -1445,9 +1407,6 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : myModifyAngle => {myModifyAngle}");
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : myBaseAngle => {myBaseAngle}");
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : myFinalAngleTurnTowards => {myFinalAngleTurnTowards}");
-            
-
-            
         }
 
         /*
@@ -1458,7 +1417,6 @@ namespace TsingNamespace.AloaloIsland
         减算爆雷a StatusID 3724
         减算爆雷b StatusID 3725
         */
-
         [ScriptMethod(name: "Boss 2 地雷魔纹指路 Boss 2 Arcane Mine Guide", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(34970|35825)$"])]
         public void Boss2_ArcaneMineGuide(Event @event, ScriptAccessory accessory)
         {
@@ -1491,10 +1449,10 @@ namespace TsingNamespace.AloaloIsland
             Vector3 debuffStack2_template2 = new (216,-300,-9.5f);
 
             /*
-                如果, 2+3分摊, 2分摊的纵坐标必须为0
-                如果, 2+2分摊, 随意
-                如果, 2+1分摊, 2分摊的纵坐标必须为-8
-                如果, 1+3分摊, 随意
+            如果, 2+3分摊, 2分摊的纵坐标必须为0
+            如果, 2+2分摊, 随意
+            如果, 2+1分摊, 2分摊的纵坐标必须为-8
+            如果, 1+3分摊, 随意
             */
             uint stackDebuffId = 3724;
             uint surgeVectorDebuffId = 3723 ;
@@ -1571,10 +1529,7 @@ namespace TsingNamespace.AloaloIsland
             boss2_myTowardsPoint = Util.RotatePointInFFXIVCoordinate(myTowardsPoint_template,oPoint,myModifyAngle);
 
             //绘图部分
-
             MultiDisDraw(new List<float[]>{new float[]{myStartPoint.X,myStartPoint.Y,myStartPoint.Z,0,10000}},accessory);
-
-
 
             accessory.Log.Debug($"Boss 2 Arcane Mine Guide : my order number in party => {1 + accessory.GetMyIndex()}");
             accessory.Log.Debug($"Boss 2 Arcane Mine Guide : cornerRot => {cornerRot}");
@@ -1584,8 +1539,85 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 2 Arcane Mine Guide : myTowardsPoint => {boss2_myTowardsPoint}");
         }
 
+        //立体爆雷指路
+        [ScriptMethod(name: "Boss 2 立体爆雷战术 Boss 2 Spatial Tactics", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(34976|35831)$"])]
+        public async void Boss2_SpatialTactics(Event @event, ScriptAccessory accessory)
+        {
+            accessory.Log.Debug($"Actived! => Boss 2 Spatial Tactics");
+            if(await DelayMillisecond(12000))
+            {
+                return;
+            }
 
+            uint ballDataId = 16448;
+            //零式难度为16606
+            uint ballDataId2 = 16606;
+            List<IGameObject> balls = accessory.GetEntitiesByDataId(ballDataId).Union(accessory.GetEntitiesByDataId(ballDataId2)).ToList();
+            if(balls.Count < 1)
+            {
+                return;
+            }
+            Vector3 originPos = new (200,-300,0);
+            Vector3 ballPos = balls[0].Position;
+            double _newRightUp = Math.Round((-0.32f + MathF.Atan2(ballPos.Z - originPos.Z,ballPos.X - originPos.X))/(0.25f * MathF.PI));
+            float newRightUp = (float)_newRightUp * 0.25f * MathF.PI;
+            //以球在场地东北角为模板 此时的newRightUp应该为 -0.25 PI
+            Vector3 behindPoint1_template = new (200,-300,12);
+            Vector3 behindPoint2_template = new (200,-300,4);
+            Vector3 behindPoint1 = Util.RotatePointInFFXIVCoordinate(behindPoint1_template,originPos,newRightUp + 0.25f * MathF.PI);
+            Vector3 behindPoint2 = Util.RotatePointInFFXIVCoordinate(behindPoint2_template,originPos,newRightUp + 0.25f * MathF.PI);
 
+            List<Vector3> startPointsList_template = new List<Vector3>{
+                new (originPos.X,originPos.Y,originPos.Z - 3.2f),
+                new (originPos.X,originPos.Y,originPos.Z - 3.2f),
+                new (originPos.X,originPos.Y,originPos.Z + 8f),
+                new (originPos.X - 3.2f,originPos.Y,originPos.Z + 11.2f)
+            };
+            List<Vector3> endPointsList_template = new List<Vector3>{
+                new (originPos.X,originPos.Y,originPos.Z - 8f),
+                new (originPos.X,originPos.Y,originPos.Z - 3.2f),
+                new (originPos.X,originPos.Y,originPos.Z + 8f),
+                new (originPos.X- 3.2f,originPos.Y,originPos.Z + 12.8f),
+            };
+            uint stackDebuffId = 3725;
+            Status myStackDebuffInfo = accessory.GetStatusInfo(accessory.Data.Me,stackDebuffId);
+            int myStack = myStackDebuffInfo != null ? myStackDebuffInfo.Param : 1;
+            myStack = myStack < 1 ? 1 : myStack;
+            Vector3 _myStartPoint = startPointsList_template[myStack -1];
+            Vector3 myStartPoint = Util.RotatePointInFFXIVCoordinate(_myStartPoint,originPos,newRightUp + 0.25f * MathF.PI);
+            Vector3 _myEndPoint = endPointsList_template[myStack -1];
+            Vector3 myEndPoint = Util.RotatePointInFFXIVCoordinate(_myEndPoint,originPos,newRightUp + 0.25f * MathF.PI);
+
+            List<float[]> pointsList = new List<float[]>{
+                new float[]{myStartPoint.X,myStartPoint.Y,myStartPoint.Z,0,8200},
+                new float[]{myEndPoint.X,myEndPoint.Y,myEndPoint.Z,0,1800},
+            };
+            
+            switch(myStack)
+            {
+                case 2:
+                case 3:
+                    pointsList.RemoveAt(pointsList.Count - 1);
+                    break;
+                case 1:
+                    break;
+                case 4:
+                    pointsList[0][4] = 12800;
+                    break;
+
+            }
+            MultiDisDraw(pointsList,accessory);
+            DrawPropertiesEdit dpRect = accessory.GetDrawPropertiesEdit(behindPoint1, new (8,8), 6000, true);
+            dpRect.Color = dpRect.Color.WithW(0.5f);
+            dpRect.TargetPosition = originPos;
+            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dpRect);
+            dpRect.Position = behindPoint2;
+            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dpRect);
+
+            accessory.Log.Debug($"Boss 2 Spatial Tactics : newRightUp => {newRightUp}");
+            accessory.Log.Debug($"Boss 2 Spatial Tactics : myStack => {myStack}");
+        }
+        
         [ScriptMethod(name: "Boss 2 三树人指路 Boss 2 Golems Guide", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16449|16607)$"])]
         public async void Boss2_GolemsGuide(Event @event, ScriptAccessory accessory)
         {
@@ -1619,7 +1651,6 @@ namespace TsingNamespace.AloaloIsland
                     break;
                 }
             }
-
 
             List<Vector3> template24_MT = new List<Vector3> 
             {
@@ -1714,56 +1745,11 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 2 Golems Guide : myPointsList0 => {_myPointsList[0]}");
             accessory.Log.Debug($"Boss 2 Golems Guide : myPointsList1 => {_myPointsList[1]}");
             accessory.Log.Debug($"Boss 2 Golems Guide : myPointsList2 => {_myPointsList[2]}");
-
-
         }
-
-        
-
-        //立体爆雷指路
-        [ScriptMethod(name: "Boss 2 立体爆雷战术 Boss 2 Spatial Tactics", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(34976|35831)$"])]
-        public async void Boss2_SpatialTactics(Event @event, ScriptAccessory accessory)
-        {
-            accessory.Log.Debug($"Actived! => Boss 2 Spatial Tactics");
-            if(await DelayMillisecond(12000))
-            {
-                return;
-            }
-
-            uint ballDataId = 16448;
-            //零式难度为16606
-            uint ballDataId2 = 16606;
-            IEnumerable<IGameObject> _balls = accessory.GetEntitiesByDataId(ballDataId).Union(accessory.GetEntitiesByDataId(ballDataId2));
-            List<IGameObject> balls = _balls.Where(obj => obj != null).Select(obj => (IGameObject)obj).ToList();
-            if(balls.Count < 1)
-            {
-                return;
-            }
-            Vector3 originPos = new (200,-300,0);
-            Vector3 ballPos = balls[0].Position;
-            double _newLeftUp = Math.Round((-0.32f + MathF.Atan2(ballPos.Z - originPos.Z,ballPos.X - originPos.X))/(0.25f * MathF.PI));
-            float newLeftUp = (float)_newLeftUp * 0.25f * MathF.PI;
-            //以球在场地东北角为模板 此时的newLeftUp应该为 -0.25 PI
-            Vector3 behindPoint1_template = new (200,-300,12);
-            Vector3 behindPoint2_template = new (200,-300,4);
-            Vector3 behindPoint1 = Util.RotatePointInFFXIVCoordinate(behindPoint1_template,originPos,newLeftUp + 0.25f * MathF.PI);
-            Vector3 behindPoint2 = Util.RotatePointInFFXIVCoordinate(behindPoint2_template,originPos,newLeftUp + 0.25f * MathF.PI);
-
-            DrawPropertiesEdit dpRect = accessory.GetDrawPropertiesEdit(behindPoint1, new (8,8), 6000, true);
-            dpRect.TargetPosition = originPos;
-            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dpRect);
-            dpRect.Position = behindPoint2;
-            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dpRect);
-        }
-        
-
         #endregion
 
 
         #region Boss3
-
-
-
         /*
         Boss3场地中心为(-200,-200,0)
         14.17.51.458 第一次花式装填 +14s 装填完成
@@ -1804,9 +1790,6 @@ namespace TsingNamespace.AloaloIsland
         */
 
 
-
-
-
         [ScriptMethod(name: "Boss 3 花式装填初始化 Boss 3 Trick Reload Init", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35146|35175)$"], userControl: false)]
         public void Boss3_TrickReloadInit(Event @event, ScriptAccessory accessory)
         { 
@@ -1815,7 +1798,6 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Actived! => Boss 3 Trick Reload Init {boss3_trickReloadsCount}");
         
         }
-
 
         //记录装填失败35110+装填成功35109
         [ScriptMethod(name: "Boss 3 花式装填记录 Boss 3 Trick Reload Log", eventType: EventTypeEnum.ActionEffect, eventCondition: ["ActionId:regex:^(35110|35109)$"])]
@@ -1868,11 +1850,6 @@ namespace TsingNamespace.AloaloIsland
 
 
             //DrawPropertiesEdit dpDount = accessory.GetDrawPropertiesEdit(accessory.Data.Me, new(6.1f),0,false);
-
-
-        
-        
-        
 
             if(boss3_trickReloadsCount == 2){
                 //等待飞镖buff出现
@@ -2022,7 +1999,7 @@ namespace TsingNamespace.AloaloIsland
             
             if(await DelayMillisecond(300))
             {
-                bombDelayTime -= 300;
+                // bombDelayTime -= 300;
                 return;
             }
 
@@ -2246,6 +2223,8 @@ namespace TsingNamespace.AloaloIsland
                         accessory.GetIndexInParty(bullEyePlayers[0]) + accessory.GetIndexInParty(bullEyePlayers[1]) == 1 
                         || accessory.GetIndexInParty(bullEyePlayers[0]) + accessory.GetIndexInParty(bullEyePlayers[1]) == 5
                         );
+                accessory.Log.Debug($"Boss 3 Second Dart Board :isMeGoLeft => {isMeGoLeft}");
+                accessory.Log.Debug($"Boss 3 Second Dart Board :isBullEyeNeedChange => {isBullEyeNeedChange}");
                 isMeGoLeft = isBullEyeNeedChange ? !isMeGoLeft : isMeGoLeft;
                 Vector3 _myStartPoint = isMeGoLeft ? noBurningChainsLeft_template : noBurningChainsRight_template;
                 myStartPoint = Util.RotatePointInFFXIVCoordinate(_myStartPoint,originPos,newNorthRot);
@@ -2297,7 +2276,7 @@ namespace TsingNamespace.AloaloIsland
             // List<uint> clawPlayers = new List<uint>();
             // List<uint> missilePlayers = new List<uint>();
             bool isMeGetClaw = false;
-            bool isMyTargetAtLeft = false;
+            bool isMyObjectAtLeft = false;
             Vector3 originPos = new (-200,-200,0);
 
             foreach (IGameObject _claw in accessory.GetEntitiesByDataId(surprisingClawDataId))
@@ -2308,7 +2287,7 @@ namespace TsingNamespace.AloaloIsland
                     {
                         isMeGetClaw = true;
                         Vector3 _pos = Util.RotatePointInFFXIVCoordinate(_claw.Position,originPos, - 0.5f * MathF.PI - boss3_rad_distance[0][0]);
-                        isMyTargetAtLeft = _pos.X < originPos.X;
+                        isMyObjectAtLeft = _pos.X < originPos.X;
                     }
                     // clawPlayers.Add((uint)_claw.TargetObjectId);
                 }
@@ -2320,7 +2299,7 @@ namespace TsingNamespace.AloaloIsland
                     if(_missile.TargetObjectId == accessory.Data.Me)
                     {
                         Vector3 _pos = Util.RotatePointInFFXIVCoordinate(_missile.Position,originPos,- 0.5f * MathF.PI - boss3_rad_distance[0][0]);
-                        isMyTargetAtLeft = _pos.X < originPos.X;
+                        isMyObjectAtLeft = _pos.X < originPos.X;
                     }
                     // missilePlayers.Add((uint)_missile.TargetObjectId);
                 }
@@ -2341,7 +2320,7 @@ namespace TsingNamespace.AloaloIsland
             Vector3 myStartPoint = Util.RotatePointInFFXIVCoordinate(_myStartPoint,originPos,_rot);
             Vector3 _myEndPoint = isMeGetClaw ? claw_endTemplate : missile_endTemplateLeft;
             Vector3 myEndPoint = Util.RotatePointInFFXIVCoordinate(_myEndPoint,originPos,_rot);
-            if((!isMeGetClaw)&&isMyTargetAtLeft)
+            if((!isMeGetClaw)&&isMyObjectAtLeft)
             {
                 _myEndPoint = missile_endTemplateRight;
                 myEndPoint =  Util.RotatePointInFFXIVCoordinate(_myEndPoint,originPos,_rot);
@@ -2352,7 +2331,7 @@ namespace TsingNamespace.AloaloIsland
             if(isMeGetClaw){
                 myPointsList[0][4] = 3800;
                 //添加拐点
-                Vector3 _point = Util.RotatePointInFFXIVCoordinate(myStartPoint,originPos,isMyTargetAtLeft?0.3f * MathF.PI:-0.3f * MathF.PI);
+                Vector3 _point = Util.RotatePointInFFXIVCoordinate(myStartPoint,originPos,isMyObjectAtLeft?0.3f * MathF.PI:-0.3f * MathF.PI);
                 myPointsList.Add(new float[]{_point.X,_point.Y,_point.Z,0,3000});
             }
             //添加结束点
@@ -2360,7 +2339,7 @@ namespace TsingNamespace.AloaloIsland
             MultiDisDraw(myPointsList,accessory);
             accessory.Log.Debug($"Boss 3 Surprising Claw Phase : my order number in party => {1 + accessory.GetMyIndex()}");
             accessory.Log.Debug($"Boss 3 Surprising Claw Phase :isMeGetClaw => {isMeGetClaw}");
-            accessory.Log.Debug($"Boss 3 Surprising Claw Phase :isMyTargetAtLeft => {isMyTargetAtLeft}");
+            accessory.Log.Debug($"Boss 3 Surprising Claw Phase :isMyObjectAtLeft => {isMyObjectAtLeft}");
             accessory.Log.Debug($"Boss 3 Surprising Claw Phase :new North => {boss3_rad_distance[0][0]}");
         }
         
@@ -2406,7 +2385,6 @@ namespace TsingNamespace.AloaloIsland
         
         }
 
-        //标记飞针DataId16479的AOE范围
         [ScriptMethod(name: "Boss 3 飞针 Boss 3 Needles", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16479|16487)$"])]
         public void Boss3_Needles(Event @event, ScriptAccessory accessory)
         {
@@ -2414,13 +2392,6 @@ namespace TsingNamespace.AloaloIsland
         }
         #endregion
 
-
-        // [ScriptMethod(name: "Test", eventType: EventTypeEnum.Chat, eventCondition: ["Type:Echo","Message:test"]), userControl: false]
-        // public void Test(Event @event, ScriptAccessory accessory)
-        // {
-        //     accessory.Log.Debug($"Test");            
-
-        // }
         private void MultiDisDraw(List<float[]> pointsList, ScriptAccessory accessory)
         {
             Vector4 colorGoNow = GuideColor_GoNow.V4.WithW(GuideColorDensity);
@@ -2431,26 +2402,15 @@ namespace TsingNamespace.AloaloIsland
             }
             accessory.DrawWaypoints(pointsList,true,0,colorGoNow,colorGoLater);
         }
-
         private bool IsInSuppress(int suppressMillisecond,string methodName) {
             lock(_lock){
                 return TsingUtilities.IsInSuppress(invokeTimestamp, methodName, suppressMillisecond);
             }
         }
-
         private async Task<bool> DelayMillisecond(int delayMillisecond){
             return await TsingUtilities.DelayMillisecond(delayMillisecond,cancellationTokenSource.Token);
         }
-
-
     }
-
-
-
-
-
-
-
 
     #region 拓展方法
     public static class ScriptExtensions_Tsing
@@ -2472,10 +2432,11 @@ namespace TsingNamespace.AloaloIsland
                 return false;
             }
         }
+        private static string _v3 = JsonConvert.SerializeObject(new Vector3(-999, -999, -999));
 
         public static uint GetActionId(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["ActionId"]);
+            return JsonConvert.DeserializeObject<uint>(@event["ActionId"] ?? "0");
         }
         public static uint GetSourceId(this Event @event)
         {
@@ -2483,11 +2444,11 @@ namespace TsingNamespace.AloaloIsland
         }
         public static uint GetSourceDataId(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["SourceDataId"]);
+            return JsonConvert.DeserializeObject<uint>(@event["SourceDataId"] ?? "0");
         }
         public static uint GetDataId(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["DataId"]);
+            return JsonConvert.DeserializeObject<uint>(@event["DataId"] ?? "0");
         }
 
         public static uint GetTargetId(this Event @event)
@@ -2497,32 +2458,32 @@ namespace TsingNamespace.AloaloIsland
 
         public static uint GetTargetIndex(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["TargetIndex"]);
+            return JsonConvert.DeserializeObject<uint>(@event["TargetIndex"] ?? "0");
         }
 
         public static Vector3 GetSourcePosition(this Event @event)
         {
-            return JsonConvert.DeserializeObject<Vector3>(@event["SourcePosition"]);
+            return JsonConvert.DeserializeObject<Vector3>(@event["SourcePosition"] ?? _v3);
         }
 
         public static Vector3 GetTargetPosition(this Event @event)
         {
-            return JsonConvert.DeserializeObject<Vector3>(@event["TargetPosition"]);
+            return JsonConvert.DeserializeObject<Vector3>(@event["TargetPosition"] ?? _v3);
         }
 
         public static Vector3 GetEffectPosition(this Event @event)
         {
-            return JsonConvert.DeserializeObject<Vector3>(@event["EffectPosition"]);
+            return JsonConvert.DeserializeObject<Vector3>(@event["EffectPosition"] ?? _v3);
         }
 
         public static float GetSourceRotation(this Event @event)
         {
-            return JsonConvert.DeserializeObject<float>(@event["SourceRotation"]);
+            return JsonConvert.DeserializeObject<float>(@event["SourceRotation"] ?? "6.28");
         }
 
         public static float GetTargetRotation(this Event @event)
         {
-            return JsonConvert.DeserializeObject<float>(@event["TargetRotation"]);
+            return JsonConvert.DeserializeObject<float>(@event["TargetRotation"] ?? "6.28");
         }
 
         public static string GetSourceName(this Event @event)
@@ -2537,7 +2498,7 @@ namespace TsingNamespace.AloaloIsland
 
         public static uint GetDurationMilliseconds(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["DurationMilliseconds"]);
+            return JsonConvert.DeserializeObject<uint>(@event["DurationMilliseconds"] ?? "0");
         }
 
         public static uint GetIndex(this Event @event)
@@ -2557,17 +2518,17 @@ namespace TsingNamespace.AloaloIsland
 
         public static uint GetStatusID(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["StatusID"]);
+            return JsonConvert.DeserializeObject<uint>(@event["StatusID"] ?? "0");
         }
 
         public static uint GetStackCount(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["StackCount"]);
+            return JsonConvert.DeserializeObject<uint>(@event["StackCount"] ?? "0");
         }
 
         public static uint GetParam(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["Param"]);
+            return JsonConvert.DeserializeObject<uint>(@event["Param"] ?? "0");
         }
 
         public static uint GetIconId(this Event @event)
@@ -2576,28 +2537,28 @@ namespace TsingNamespace.AloaloIsland
         }
 
 
-
-
-
         //获取小队成员的队伍序号
-        public static int GetIndexInParty (this ScriptAccessory accessory,uint entityId){
+        public static int GetIndexInParty (this ScriptAccessory accessory,uint entityId)
+        {
             return accessory.Data.PartyList.IndexOf(entityId);
         }
-        public static int GetMyIndex(this ScriptAccessory accessory){
+        public static int GetMyIndex(this ScriptAccessory accessory)
+        {
             return accessory.GetIndexInParty(accessory.Data.Me);
         }
 
-
-
         //获取小队列表
-        public static IEnumerable<IBattleChara> GetPartyEntities(this ScriptAccessory accessory){
+        public static IEnumerable<IBattleChara> GetPartyEntities(this ScriptAccessory accessory)
+        {
             return accessory.Data.Objects.Where(obj => obj is IBattleChara && accessory.Data.PartyList.Contains(obj.EntityId)).Select(obj => (IBattleChara)obj);
         }
 
-        public static IEnumerable<IGameObject> GetEntitiesByDataId(this ScriptAccessory accessory,uint dataId){
+        public static IEnumerable<IGameObject> GetEntitiesByDataId(this ScriptAccessory accessory,uint dataId)
+        {
             return accessory.Data.Objects.Where(obj => obj is IGameObject && obj?.DataId == dataId);
         }
-        public static List<uint> GetEntityIdsByDataId(this ScriptAccessory accessory,uint dataId){
+        public static List<uint> GetEntityIdsByDataId(this ScriptAccessory accessory,uint dataId)
+        {
             return accessory.GetEntitiesByDataId(dataId).Select(obj => (obj?.EntityId) ?? 0).ToList();
         }
         public static Dictionary<uint,IGameObject?> GetEntitiesByIdsList(this ScriptAccessory accessory,List<uint> idsList)
@@ -2628,10 +2589,6 @@ namespace TsingNamespace.AloaloIsland
             return statusInfo;
         }
 
-
-
-
-        
         //根据statusId获得持有该status的实体的列表
         public static List<uint> whoGetStatus(this ScriptAccessory accessory,uint statusId)
         {
@@ -2674,9 +2631,6 @@ namespace TsingNamespace.AloaloIsland
             return accessory.whoNotGetStatusInParty(statusId).Except(new List<uint> { accessory.Data.Me }).ToList();
         }
 
-
-
-
         //颜色, 颜色内部的4个参数 R,G,B,density(颜色浓度,非透明度)
         public enum ColorType {
             Red,Pink,Cyan,Orange
@@ -2692,8 +2646,6 @@ namespace TsingNamespace.AloaloIsland
         {
             return colors[colorType];
         }
-
-
         //快捷绘图参数和快捷绘图
 
         public static DrawPropertiesEdit GetDrawPropertiesEdit(this ScriptAccessory accessory,string name,object position, Vector2 scale, long delay, long destoryAt,Vector4 color)
@@ -2712,8 +2664,6 @@ namespace TsingNamespace.AloaloIsland
                     accessory.Log.Debug($"parm type error : position =>{position}");
                     break;
             }
-
-
             drawPropertiesEdit.Scale = scale;
             drawPropertiesEdit.Delay = delay;
             drawPropertiesEdit.DestoryAt = destoryAt;
@@ -2721,15 +2671,11 @@ namespace TsingNamespace.AloaloIsland
             //drawPropertiesEdit.TargetColor = targetColor;
             return drawPropertiesEdit;
         }
-
-
         public static DrawPropertiesEdit GetDrawPropertiesEdit(this ScriptAccessory accessory,object position, Vector2 scale, long destoryAt, bool isSafe)
         {
             return accessory.GetDrawPropertiesEdit(Guid.NewGuid().ToString(),position,scale,0,destoryAt
             ,isSafe?accessory.Data.DefaultSafeColor:accessory.Data.DefaultDangerColor);
         }
-
-
         public static void FastDraw(this ScriptAccessory accessory,DrawTypeEnum drawType,object position,Vector2 scale, Vector2 delay_destoryAt, bool isSafe){
             DrawPropertiesEdit drawPropertiesEdit = accessory.GetDrawPropertiesEdit(position,scale,(long)delay_destoryAt.Y,isSafe);
             drawPropertiesEdit.Delay = (long)delay_destoryAt.X;
@@ -2743,7 +2689,6 @@ namespace TsingNamespace.AloaloIsland
             //accessory.Log.Debug($"FastDraw {drawType.ToString()} :{drawPropertiesEdit.ToString()}");
             accessory.Method.SendDraw(DrawModeEnum.Default, drawType, drawPropertiesEdit);
         }
-
         public static void FastDraw(this ScriptAccessory accessory,DrawTypeEnum drawType,object position,Vector2 scale, Vector2 delay_destoryAt, Vector4 color){
             DrawPropertiesEdit drawPropertiesEdit = accessory.GetDrawPropertiesEdit(position,scale,(long)delay_destoryAt.Y,true);
             drawPropertiesEdit.Delay = (long)delay_destoryAt.X;
@@ -2758,10 +2703,6 @@ namespace TsingNamespace.AloaloIsland
             //accessory.Log.Debug($"FastDraw {drawType.ToString()} :{drawPropertiesEdit.ToString()}");
             accessory.Method.SendDraw(DrawModeEnum.Default, drawType, drawPropertiesEdit);
         }
-
-
-
-
         public static void FastDrawDisplacement(this ScriptAccessory accessory,Vector3[] twoPosition,Vector2 scale, long destoryAt, Vector4 color)
         {
             if(twoPosition.Length == 2){
@@ -2832,13 +2773,11 @@ namespace TsingNamespace.AloaloIsland
                         ,color_goLater);
                         accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Circle, drawPropertiesEdit_goLaterEndCircle);
                     }
-
                 }
                 //为下一个点准备开始时间节点(guideStartTimeMillis为当前点全部指路的结束时间点)
                 guideStartTimeMillis = guideStartTimeMillis + (int)pointsList[i][3] + (int)pointsList[i][4];
             }
         }
-
 
         /*
         画一组面向机制的指示
@@ -2850,7 +2789,7 @@ namespace TsingNamespace.AloaloIsland
         public static void DrawTurnTowards(this ScriptAccessory accessory,object position,Vector3 towardsDonutScale_radAndRotation, Vector2 palyerDonutScale,Vector2 delay_destoryAt,Vector4 color,bool palyerDonutOn)
         {
             //1.绘制中缺披萨部分
-            //KOD中的弧度增方向似乎尊重笛卡尔坐标系中的弧度增方向，与狒狒坐标系中的弧度增方向相反
+            //KOD中的弧度增方向似乎遵从笛卡尔坐标系中的弧度增方向，与狒狒坐标系中的弧度增方向相反
             Vector3 pizzaDp = towardsDonutScale_radAndRotation;
             DrawPropertiesEdit dptt1 = accessory.GetDrawPropertiesEdit(position,new (pizzaDp.X),(long)delay_destoryAt.Y,true);
             dptt1.Owner = accessory.Data.Me;
@@ -2872,14 +2811,14 @@ namespace TsingNamespace.AloaloIsland
                     accessory.Log.Debug($"parm type error : position =>{position}");
                     break;
             }
-            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Donut, dptt1);
+            accessory.Method.SendDraw(DrawModeEnum.Vfx, DrawTypeEnum.Donut, dptt1);
             dptt1.Scale = new (palyerDonutScale.Y);
-            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Fan, dptt1);
+            accessory.Method.SendDraw(DrawModeEnum.Vfx, DrawTypeEnum.Fan, dptt1);
             dptt1.Scale = new (2,pizzaDp.X);
             dptt1.Rotation = - pizzaDp.Z + 0.5f * pizzaDp.Y;
-            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Line, dptt1);
+            accessory.Method.SendDraw(DrawModeEnum.Vfx, DrawTypeEnum.Line, dptt1);
             dptt1.Rotation = - pizzaDp.Z - 0.5f * pizzaDp.Y;
-            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Line, dptt1);
+            accessory.Method.SendDraw(DrawModeEnum.Vfx, DrawTypeEnum.Line, dptt1);
 
             //绘制人物面向扇形部分, 有时候有一个机制由多个引导面向
             if(palyerDonutOn){
@@ -2888,18 +2827,11 @@ namespace TsingNamespace.AloaloIsland
                 dptt2.InnerScale = new (palyerDonutScale.Y);
                 dptt2.Radian = pizzaDp.Y - 0.02f;
                 dptt2.Color = color;
-                accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Donut, dptt2);
+                accessory.Method.SendDraw(DrawModeEnum.Vfx, DrawTypeEnum.Donut, dptt2);
             }
-
-
         }
-
-
-    
     }
     #endregion
-
-
 
     #region 工具类
     public static class TsingUtilities
@@ -2935,8 +2867,6 @@ namespace TsingNamespace.AloaloIsland
         第二象限 | 第一象限
         笛卡尔坐标系的顺时针，和狒狒十四坐标系中的顺时针相反 <= 由于Y轴被反转了
         */
-
-
         public static Vector2 RotatePoint(Vector2 point, Vector2 centre, float radian)
         {
             Vector2 centreToPoint_v2 = new(point.X - centre.X, point.Y - centre.Y);
@@ -3047,13 +2977,13 @@ namespace TsingNamespace.AloaloIsland
 
         //做一个触发器CD
         // 当使用async和await关键字时，编译器会生成一个状态机以处理异步操作。这会导致在调试和运行时，方法名称会有所变化。请尽量【不要】使用MethodBase.GetCurrentMethod().Name作为获得方法名的方法。
-        public static bool IsInSuppress(ConcurrentDictionary<string,long> dict, string methodName,long suppressMillisecond) {
+        public static bool IsInSuppress(ConcurrentDictionary<string,long> dict, string methodName,long suppressMillisecond)
+        {
             //1.获取上次触发的时间戳
             //2.对比当前时间戳
             //3.如果时间差大于暂停时间，说明不在暂停时间内,返回false
             //4.如果时间差小于或者等于暂停时间，说明在暂停时间内,返回true
             bool isIn = false;
-
             if (dict.TryGetValue(methodName, out long result))
             {
                 //如果找到了上次触发的时间戳，则提取比对
@@ -3072,13 +3002,12 @@ namespace TsingNamespace.AloaloIsland
                 isIn = !dict.TryAdd(methodName, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             }
-
             return isIn;
         }
 
         //做一个有中断功能的延时器, 当被打断时, 会返回true;
-        public static async Task<bool> DelayMillisecond(int delayMillisecond, CancellationToken cancellationToken){
-
+        public static async Task<bool> DelayMillisecond(int delayMillisecond, CancellationToken cancellationToken)
+        {
             try{
                 //等待 delayMillisecond
                 await Task.Delay(delayMillisecond,cancellationToken);
@@ -3090,13 +3019,7 @@ namespace TsingNamespace.AloaloIsland
                 //被其他意外取消了
                 return true;
             }
-
         }
-
-
-
     }
     #endregion
-
-
 }
