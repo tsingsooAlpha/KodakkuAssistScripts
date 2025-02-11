@@ -32,9 +32,20 @@ using EX = TsingNamespace.TsingTest.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.TsingTest
 {
-    [ScriptType(name: "测试工具", guid: "e3cfc380-edc2-f441-2424-e9e294f2632e", version: "0.0.0.1", author: "Mao")]
+    [ScriptType(name: "测试工具", guid: "e3cfc380-edc2-f441-2424-e9e294f2632e", version: "0.0.0.1", author: "Mao",note: noteStr)]
     public class TsingTestScript
     {
+        const string noteStr =
+        """
+        1.面向修正指令
+        /e  _towardsRound 参数1,参数2,参数3
+            参数1-方向切割的数量
+            参数2-修正的间隔(最低90)
+            参数3-持续的时间(最低100)
+            示例 /e  _towardsRound 4,100,5000
+                以4个方向为基准(通常是东西南北),每隔100毫秒,持续5000毫秒
+                将当前面向修正到最近的正东正西正南正北中的一个
+        """;
 
         [ScriptMethod(name: "获得某些debuff时进行面向修正", eventType: EventTypeEnum.StatusAdd, eventCondition: ["StatusID:regex:^(3452|3453)$"])]
         public async void TowardsRoundByStatusId(Event @event, ScriptAccessory accessory)
