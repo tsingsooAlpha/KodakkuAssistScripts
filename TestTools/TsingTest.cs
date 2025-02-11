@@ -65,6 +65,10 @@ namespace TsingNamespace.TsingTest
         [ScriptMethod(name: "面向修正指令", eventType: EventTypeEnum.Chat, eventCondition: ["Type:Echo","Message:regex:^_towardsRound\\s+(\\d+),(\\d+),(\\d+)$"])]
         public async void TowardsRoundByCommand(Event @event, ScriptAccessory accessory)
         {
+            if(IsInSuppress(4500,nameof(TowardsRoundByCommand)))
+            {
+                return;
+            }
             string input = @event.GetMessage();
             string pattern = @"^_towardsRound\s+(\d+),(\d+),(\d+)$";
             Match match = Regex.Match(input, pattern);
@@ -80,20 +84,16 @@ namespace TsingNamespace.TsingTest
 
 
 
-        [ScriptMethod(name: "Test", eventType: EventTypeEnum.Chat, eventCondition: ["Type:Echo","Message:test"])]
-        public void Test(Event @event, ScriptAccessory accessory)
-        {
-            accessory.Log.Debug($"Test");
+        // [ScriptMethod(name: "Test", eventType: EventTypeEnum.Chat, eventCondition: ["Type:Echo","Message:test"])]
+        // public void Test(Event @event, ScriptAccessory accessory)
+        // {
+        //     accessory.Log.Debug($"Test");
            
-            
-           
-
-
-        }
-        [ScriptMethod(name: "攻击", eventType: EventTypeEnum.ActionEffect, eventCondition: ["ActionId:25859"])]
-        public async void ActionEffectTest(Event @event, ScriptAccessory accessory)
-        {
-        }
+        // }
+        // [ScriptMethod(name: "攻击", eventType: EventTypeEnum.ActionEffect, eventCondition: ["ActionId:25859"])]
+        // public async void ActionEffectTest(Event @event, ScriptAccessory accessory)
+        // {
+        // }
 
 
 
@@ -102,6 +102,9 @@ namespace TsingNamespace.TsingTest
 
         // 一个CancellationTokenSource 用于取消延时任务
         private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        private static readonly object _lock = new object();
+        // 用于存放触发器触发的时间戳
+        private ConcurrentDictionary<string, long> invokeTimestamp = new ConcurrentDictionary<string, long>();
         //面向修正
         private async void _towardsRound(Vector3 count_per_duration,ScriptAccessory accessory)
         {
@@ -130,6 +133,11 @@ namespace TsingNamespace.TsingTest
         private async Task<bool> DelayMillisecond(int delayMillisecond){
             return await EX.DelayMillisecond(delayMillisecond,cancellationTokenSource.Token);
         }
+        private bool IsInSuppress(int suppressMillisecond,string methodName) {
+            lock(_lock){
+                return EX.IsInSuppress(invokeTimestamp, methodName, suppressMillisecond);
+            }
+        }
     }
 
     #region 拓展方法
@@ -155,6 +163,22 @@ namespace TsingNamespace.TsingTest
                 //被其他意外取消了
                 return true;
             }
+        }
+        public static bool IsInSuppress(ConcurrentDictionary<string,long> dict, string methodName,long suppressMillisecond)
+        {
+            bool isIn = false;
+            if (dict.TryGetValue(methodName, out long result))
+            {
+                isIn = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - result <= suppressMillisecond;
+                if(!isIn){
+                    dict[methodName] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                }
+            }
+            else 
+            {
+                isIn = !dict.TryAdd(methodName, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            }
+            return isIn;
         }
 
 
