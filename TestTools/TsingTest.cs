@@ -50,17 +50,17 @@ namespace TsingNamespace.TsingTest
         [ScriptMethod(name: "获得某些debuff时进行面向修正", eventType: EventTypeEnum.StatusAdd, eventCondition: ["StatusID:regex:^(3452|3453)$"])]
         public async void TowardsRoundByStatusId(Event @event, ScriptAccessory accessory)
         {
-            if(@event.GetTargetId() != accessory.Data.Me)
-            {
-                return;
-            }
-            uint duration = @event.GetDurationMilliseconds();
-            duration = duration > 5000 ? duration : 5000;
-            if(await DelayMillisecond((int)duration - 5000))
-            {
-                return;
-            }
-            _towardsRound(new(4,100,5000),accessory);
+            // if(@event.GetTargetId() != accessory.Data.Me)
+            // {
+            //     return;
+            // }
+            // uint duration = @event.GetDurationMilliseconds();
+            // duration = duration > 5000 ? duration : 5000;
+            // if(await DelayMillisecond((int)duration - 5000))
+            // {
+            //     return;
+            // }
+            // _towardsRound(new(4,100,5000),accessory);
         }
         [ScriptMethod(name: "面向修正指令", eventType: EventTypeEnum.Chat, eventCondition: ["Type:Echo","Message:regex:^_towardsRound\\s+(\\d+),(\\d+),(\\d+)$"])]
         public async void TowardsRoundByCommand(Event @event, ScriptAccessory accessory)
