@@ -28,7 +28,7 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.3", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.4", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
@@ -881,37 +881,43 @@ namespace TsingNamespace.AloaloIsland
                                         : mobsGetbubbleDebuff.Select(obj => (obj?.Position) ?? new (0,1,0)).ToList();
             mobsIndex = mobsIndex.OrderBy(v3 => (Math.Round(MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI) < 0 ? MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI : MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI)).ToList();
             //3.确定自己要引导哪个小怪，获得该先去哪个数字点处理分散
-            accessory.Log.Debug($"Boss 1 Second Spring Crystals Safe Zone Draw : mobsIndex.Count => {mobsIndex.Count}");
+            accessory.Log.Debug($"Boss 1 Mob Guide : mobsIndex.Count => {mobsIndex.Count}");
             Vector3 myMob = mobsIndex.Count > 0 
                             ? (isMeFirst ? mobsIndex[0] : mobsIndex[mobsIndex.Count -1])
                             : new (0,0,0) ;
 
             //4.查找水晶位置，计算安全区类型
             //以rad = 0 的位置作为安全点模板
-            Vector2 startPoint_template = new (10,-10);
+            Vector2 startPoint_template = new (10,10);
+            //安全区标记 0,未检测到; 1左右，2上下,4四角
+            int safeZoneType = 0;
             //水晶模型ID
             uint springCrystalDataId1 = 16542;
             uint springCrystalDataId2 = 16549;
-            //安全区标记 0,未检测到; 1左右，2上下,4四角
-            int safeZoneType = 0;
             IEnumerable<IGameObject> _crystalList1 = accessory.GetEntitiesByDataId(springCrystalDataId1)
                                                 .Where(obj => obj is IGameObject gameObject && gameObject.Position.X > 0 && gameObject.Position.Z < 0);
             IEnumerable<IGameObject> _crystalList2 = accessory.GetEntitiesByDataId(springCrystalDataId2)
                                                 .Where(obj => obj is IGameObject gameObject && gameObject.Position.X > 0 && gameObject.Position.Z < 0);
                                                 
                                                 
-            List<IGameObject> crystalList = _crystalList1.Union(_crystalList1).ToList();
-            //Vector2 startPoint_template = new (0,0);
-            if(crystalList.Count > 0 && Math.Round(crystalList[0].Rotation) < 0){
-                //右上角水晶为竖水晶,左右安全区
-                startPoint_template = new (11f, 9f);
-                safeZoneType = 1;
-            }else{
-                //右上角水晶为横水晶
-                //横坐标<10 四角安全区;否则上下安全区
-                startPoint_template = crystalList[0].Position.X < 10 ? new (11f, 11f) : new (9f, 11f);
-                safeZoneType = crystalList[0].Position.X < 10 ? 4 : 2;
+            List<IGameObject> crystalList = _crystalList1.Union(_crystalList2).ToList();
+            if(crystalList.Count > 0)
+            {
+                if(Math.Round(crystalList[0].Rotation) < 0)
+                {
+                    //右上角水晶为竖水晶,左右安全区
+                    startPoint_template = new (11f, 9f);
+                    safeZoneType = 1;
+                }
+                else
+                {
+                    //右上角水晶为横水晶
+                    //横坐标<10 四角安全区;否则上下安全区
+                    startPoint_template = crystalList[0].Position.X < 10 ? new (11f, 11f) : new (9f, 11f);
+                    safeZoneType = crystalList[0].Position.X < 10 ? 4 : 2;
+                }
             }
+
             Vector2 myStartPoint = startPoint_template;
             if(myMob.X < - 5)
             {
@@ -1251,10 +1257,10 @@ namespace TsingNamespace.AloaloIsland
 
             uint yellowArrowDataId = 2013505;
             IEnumerable<IGameObject> yellowArrows = accessory.GetEntitiesByDataId(yellowArrowDataId);
-            uint ballDataId = 16448;
+            uint ballDataId1 = 16448;
             //零式难度为16606
             uint ballDataId2 = 16606;
-            IEnumerable<IGameObject> _balls = accessory.GetEntitiesByDataId(ballDataId).Union(accessory.GetEntitiesByDataId(ballDataId2));
+            IEnumerable<IGameObject> _balls = accessory.GetEntitiesByDataId(ballDataId1).Union(accessory.GetEntitiesByDataId(ballDataId2));
             List<IGameObject> balls = _balls.Where(obj => obj != null).Select(obj => (IGameObject)obj).ToList();
 
             foreach(IGameObject? obj in yellowArrows)
@@ -1549,10 +1555,10 @@ namespace TsingNamespace.AloaloIsland
                 return;
             }
 
-            uint ballDataId = 16448;
+            uint ballDataId1 = 16448;
             //零式难度为16606
             uint ballDataId2 = 16606;
-            List<IGameObject> balls = accessory.GetEntitiesByDataId(ballDataId).Union(accessory.GetEntitiesByDataId(ballDataId2)).ToList();
+            List<IGameObject> balls = accessory.GetEntitiesByDataId(ballDataId1).Union(accessory.GetEntitiesByDataId(ballDataId2)).ToList();
             if(balls.Count < 1)
             {
                 return;
@@ -2076,13 +2082,13 @@ namespace TsingNamespace.AloaloIsland
 
             
             /*
-                传递一下哪个炸弹离哪个数字点最近
-                点1, -0.25π,19
-                点2, 0.25π,19
-                点3, 0.75π,19
-                点4, -0.75π,19
-                计算每个点到三个炸弹的距离，取其中最短的距离作为该点的 标识距离
-                按照标识距离将每个点排序
+            传递一下哪个炸弹离哪个数字点最近
+            点1, -0.25π,19
+            点2, 0.25π,19
+            点3, 0.75π,19
+            点4, -0.75π,19
+            计算每个点到三个炸弹的距离，取其中最短的距离作为该点的 标识距离
+            按照标识距离将每个点排序
             */
             Vector3 originPos = new (-200,-200,0);
             List<float[]> rad_distance = new List<float[]>
@@ -2432,8 +2438,7 @@ namespace TsingNamespace.AloaloIsland
                 return false;
             }
         }
-        private static string _v3 = JsonConvert.SerializeObject(new Vector3(-999, -999, -999));
-
+        private static string notFound_v3 = JsonConvert.SerializeObject(new Vector3(-404, -404, -404));
         public static uint GetActionId(this Event @event)
         {
             return JsonConvert.DeserializeObject<uint>(@event["ActionId"] ?? "0");
@@ -2463,47 +2468,52 @@ namespace TsingNamespace.AloaloIsland
 
         public static Vector3 GetSourcePosition(this Event @event)
         {
-            return JsonConvert.DeserializeObject<Vector3>(@event["SourcePosition"] ?? _v3);
+            return JsonConvert.DeserializeObject<Vector3>(@event["SourcePosition"] ?? notFound_v3);
         }
 
         public static Vector3 GetTargetPosition(this Event @event)
         {
-            return JsonConvert.DeserializeObject<Vector3>(@event["TargetPosition"] ?? _v3);
+            return JsonConvert.DeserializeObject<Vector3>(@event["TargetPosition"] ?? notFound_v3);
         }
 
         public static Vector3 GetEffectPosition(this Event @event)
         {
-            return JsonConvert.DeserializeObject<Vector3>(@event["EffectPosition"] ?? _v3);
+            return JsonConvert.DeserializeObject<Vector3>(@event["EffectPosition"] ?? notFound_v3);
         }
 
         public static float GetSourceRotation(this Event @event)
         {
-            return JsonConvert.DeserializeObject<float>(@event["SourceRotation"] ?? "6.28");
+            return JsonConvert.DeserializeObject<float>(@event["SourceRotation"] ?? "404.404");
         }
 
         public static float GetTargetRotation(this Event @event)
         {
-            return JsonConvert.DeserializeObject<float>(@event["TargetRotation"] ?? "6.28");
+            return JsonConvert.DeserializeObject<float>(@event["TargetRotation"] ?? "404.404");
         }
 
         public static string GetSourceName(this Event @event)
         {
-            return @event["SourceName"];
+            return @event["SourceName"] ?? "notFound" ;
         }
 
         public static string GetTargetName(this Event @event)
         {
-            return @event["TargetName"];
+            return @event["TargetName"] ?? "notFound" ;
         }
-
+        /*
+        当玩家给自己附加一个永续状态时(比如坦克的盾姿,PVP中的冲刺)
+        @event["DurationMilliseconds"]的返回值是"18446744073709551615",这个值会导致抛出一个异常
+        */
         public static uint GetDurationMilliseconds(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["DurationMilliseconds"] ?? "0");
+            string _dm = @event["DurationMilliseconds"];
+            _dm = _dm.Length < 10 ? _dm : "404404404";
+            return JsonConvert.DeserializeObject<uint>(_dm);
         }
 
         public static uint GetIndex(this Event @event)
         {
-            return ParseHexId(@event["Index"], out uint id) ? id : 0;
+            return ParseHexId(@event["Index"], out uint id) ? id : 404;
         }
 
         public static uint GetState(this Event @event)
@@ -2513,7 +2523,7 @@ namespace TsingNamespace.AloaloIsland
 
         public static uint GetDirectorId(this Event @event)
         {
-            return ParseHexId(@event["DirectorId"], out uint id) ? id : 0;
+            return ParseHexId(@event["DirectorId"], out uint id) ? id : 404;
         }
 
         public static uint GetStatusID(this Event @event)
@@ -2523,12 +2533,12 @@ namespace TsingNamespace.AloaloIsland
 
         public static uint GetStackCount(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["StackCount"] ?? "0");
+            return JsonConvert.DeserializeObject<uint>(@event["StackCount"] ?? "404");
         }
 
         public static uint GetParam(this Event @event)
         {
-            return JsonConvert.DeserializeObject<uint>(@event["Param"] ?? "0");
+            return JsonConvert.DeserializeObject<uint>(@event["Param"] ?? "404");
         }
 
         public static uint GetIconId(this Event @event)
