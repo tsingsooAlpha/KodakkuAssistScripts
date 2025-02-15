@@ -28,7 +28,7 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.4", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.5", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
@@ -291,7 +291,7 @@ namespace TsingNamespace.AloaloIsland
             double rad = 0 ;
             double crystalPosRad = MathF.Atan2(@event.GetSourcePosition().Z,@event.GetSourcePosition().X);
             crystalPosRad = crystalPosRad < 0 ? crystalPosRad + 2 * Math.PI : crystalPosRad ;
-            if(Math.Abs(@event.GetSourceRotation() - 0) > 1){
+            if(Math.Abs(@event.GetSourceRotation()) > 1){
                 //说明是纵水晶
                 rad = crystalPosRad < Math.PI ? Math.PI * 1f/2 : Math.PI * 3f/2 ;
 
@@ -397,7 +397,7 @@ namespace TsingNamespace.AloaloIsland
                 通常排队法西北组人员基本也符合去北半场找二麻水晶对角的规则
                 有两种情况例外，近中水晶为竖水晶，位置在右下侧或者左上侧
                 */
-                IEnumerable<IGameObject> springCrystals = crystalsList.Where(obj => obj.Rotation < -1);
+                IEnumerable<IGameObject> springCrystals = crystalsList.Where(obj => Math.Abs(obj.Rotation) > 1);
                 //通过坐标Z值将水晶进行排序
                 springCrystals = isMeGoToNorthWest 
                         ? springCrystals.OrderBy(obj => obj.Position.Z)
@@ -406,12 +406,15 @@ namespace TsingNamespace.AloaloIsland
                 //排队法相关内容,排队法例外情况,近中水晶为竖水晶，位置在右下侧或者左上侧(坐标乘积为正数)
                 bool isNanBeiFa = Boss1_Walkthrough != Boss1_WalkthroughEnum.PaiDuiFa;
                 accessory.Log.Debug($"Boss 1 Spring Crystals Guide : isNanBeiFa => {isNanBeiFa}");
-                List<IGameObject> _centreCrystal = crystalsList.Where(obj => obj.Rotation < -1 && Math.Abs(obj.Position.X) < 6 && Math.Abs(obj.Position.Z) < 6).ToList();
+                // 25.2.15 零式难度下竖水晶的面向可能是1.57或者-1.57,而非异闻难度下的只有-1.57
+                // List<IGameObject> _centreCrystal = crystalsList.Where(obj => obj.Rotation < -1 && Math.Abs(obj.Position.X) < 6 && Math.Abs(obj.Position.Z) < 6).ToList();
+                List<IGameObject> _centreCrystal = crystalsList.Where(obj => Math.Abs(obj.Rotation) > 1 && Math.Abs(obj.Position.X) < 6 && Math.Abs(obj.Position.Z) < 6).ToList();
                 bool isNeedChange = !isNanBeiFa && _centreCrystal.Count > 0 && _centreCrystal[0].Position.X * _centreCrystal[0].Position.Z > 0;
 
                 int _count = springCrystals.Count();
                 Vector3 springCrystalPos = _count > 0 ? (springCrystals.ToList())[isNeedChange ? _count - 1 : 0].Position : new (0,0,0);
                 Vector3 _centre = new (Math.Sign(springCrystalPos.X) * 10, springCrystalPos.Y, Math.Sign(springCrystalPos.Z) * 10);
+                accessory.Log.Debug($"Boss 1 Spring Crystals Guide : _count => {_count}");
                 myEndPosition = Util.RotatePointInFFXIVCoordinate(springCrystalPos,_centre,MathF.PI);
                 if(!isNanBeiFa)
                 {
@@ -478,7 +481,8 @@ namespace TsingNamespace.AloaloIsland
                     //accessory.Log.Debug($"Boss 1 First Spring Crystals Guide : springCrystals.Count() => {springCrystals.Count()}");
 
                     
-                    if(springCrystals.Count() > 0 && (Math.Sign(Math.Round((springCrystals.ToList())[0].Rotation)) == (isPartyGetHydrofallDebuff ? 0 : -1)))
+                    //if(springCrystals.Count() > 0 && (Math.Sign(Math.Round((springCrystals.ToList())[0].Rotation)) == (isPartyGetHydrofallDebuff ? 0 : -1)))
+                    if(springCrystals.Count() > 0 && (Math.Sign(Math.Round(Math.Abs((springCrystals.ToList())[0].Rotation))) == (isPartyGetHydrofallDebuff ? 0 : 1)))
                     {   
                         //accessory.Log.Debug($"Boss 1 Spring Crystals Guide : springCrystals[0] => {(springCrystals.ToList())[0].Position},{(springCrystals.ToList())[0].Rotation}");
                         if(!isNanBeiFa)
@@ -696,7 +700,7 @@ namespace TsingNamespace.AloaloIsland
 
 
         //为钢铁月环标记水墙的危险区
-        [ScriptMethod(name: "Boss 1 水墙 Boss 1 Twintides Bubble Type", eventType: EventTypeEnum.ObjectChanged, eventCondition: ["DataId:2013494", "Operate:Add"], userControl: false)]
+        [ScriptMethod(name: "Boss 1 水墙 Boss 1 Twintides Bubble Type", eventType: EventTypeEnum.ObjectChanged, eventCondition: ["DataId:2013494", "Operate:Add"])]
         public void Boss1_TwintidesBubbleType(Event @event, ScriptAccessory accessory)
         {
             Vector3 bubblePos = @event.GetSourcePosition();
@@ -879,7 +883,12 @@ namespace TsingNamespace.AloaloIsland
             List<Vector3> mobsIndex = myDebuffId == bubbleDebuffId 
                                         ? mobs.Except(mobsGetbubbleDebuff).Select(obj => (obj?.Position) ?? new (0,1,0)).ToList()
                                         : mobsGetbubbleDebuff.Select(obj => (obj?.Position) ?? new (0,1,0)).ToList();
-            mobsIndex = mobsIndex.OrderBy(v3 => (Math.Round(MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI) < 0 ? MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI : MathF.Atan2(v3.Z,v3.X) + 0.5* Math.PI)).ToList();
+            mobsIndex = mobsIndex.OrderBy(v3 =>
+                {
+                    float angle = MathF.Atan2(v3.Z, v3.X) + 0.6f * MathF.PI;
+                    return angle < 0 ? angle + 2 * MathF.PI : angle;
+                }  
+            ).ToList();
             //3.确定自己要引导哪个小怪，获得该先去哪个数字点处理分散
             accessory.Log.Debug($"Boss 1 Mob Guide : mobsIndex.Count => {mobsIndex.Count}");
             Vector3 myMob = mobsIndex.Count > 0 
@@ -903,7 +912,7 @@ namespace TsingNamespace.AloaloIsland
             List<IGameObject> crystalList = _crystalList1.Union(_crystalList2).ToList();
             if(crystalList.Count > 0)
             {
-                if(Math.Round(crystalList[0].Rotation) < 0)
+                if(Math.Abs(crystalList[0].Rotation) > 1 )
                 {
                     //右上角水晶为竖水晶,左右安全区
                     startPoint_template = new (11f, 9f);
