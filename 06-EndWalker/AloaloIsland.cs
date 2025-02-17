@@ -28,34 +28,41 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.5", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.6", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
         """
         基于猫猫窝攻略 ; Boss 1 默认采用融合法, 可前往用户设置修改.
 
-
-
+        0.0.0.6
+            1.视觉调整: 指路的宽度和落点尺寸微调;
+            2.视觉调整: 加大 Boss 3 第二次转盘机制指路颜色深度;
+            3.视觉调整: 隐藏 Boss 3 第二次转盘的大火球;
+            4.功能添加: Boss 2 强制移动debuff末5s可启用面向调整(默认关闭);
+            5.功能添加: 可自定义指路特效宽度(最小值为0.1,最大值为10);
         0.0.0.3
             1.添加 Boss 1 第一次水晶机制指路的依据类型 : 
                 融合法(RongHeFa), 南北法(NanBeiFa), 排队法(PaiDuiFa);
             2.修改 Boss 2 面向指引颜色调整为和GuideColor_GoNow一致;
             3.修改 Boss 2 面向指引绘图方式固定为Vfx;
             4.添加 Boss 2 立体爆雷战术机制的相关指路内容;
-
         """;
         [UserSetting("指路时使用的颜色 => 类型: 立即前往")]
         public ScriptColor GuideColor_GoNow { get; set; } = new() { V4 = new(0, 1, 1, 2) };
         [UserSetting("指路时使用的颜色 => 类型: 稍后前往")]
         public ScriptColor GuideColor_GoLater { get; set; } = new() { V4 = new(1, 1, 0, 2) };
-        
+        [UserSetting("Vfx绘制时指路特效的宽度")]
+        public float Guide_Width { get; set; } = 1.4f;
         [UserSetting("指路时使用的颜色深度")]
         public float GuideColorDensity { get; set; } = 2;
 
         [UserSetting("Boss 1 第一次水晶机制指路依据")]
-        public Boss1_WalkthroughEnum Boss1_Walkthrough { get; set; }
+        public Boss1_WalkthroughEnum Boss1_Walkthrough { get; set; } = Boss1_WalkthroughEnum.RongHeFa;
         public enum Boss1_WalkthroughEnum { RongHeFa,NanBeiFa,PaiDuiFa }
+
+        [UserSetting("Boss 2 平面魔纹战术(扫雷)强制移动启用面向修正")]
+        public bool Boss2_TowardsRound { get; set; } = false;
 
         // Kod内部小队成员序号(与游戏内小队成员列表顺序无关，与指令/KTeam打开的窗口有关)与职能的对应关系。
         // 0-MT,1-H1,2-D1,3-D2
@@ -162,7 +169,7 @@ namespace TsingNamespace.AloaloIsland
         {
             DrawPropertiesEdit propFan = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(5.5f),1000,false);
             propFan.Offset = new(0, 0, -2.7f);
-            propFan.Radian = (float)(Math.PI);
+            propFan.Radian = MathF.PI;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Fan, propFan);
 
             DrawPropertiesEdit propDisplacement = accessory.GetDrawPropertiesEdit(propFan.Owner,new(5, 4.75f),propFan.DestoryAt,false);
@@ -190,8 +197,8 @@ namespace TsingNamespace.AloaloIsland
             accessory.FastDraw(DrawTypeEnum.Fan,@event.GetSourceId(),new Vector2(9.1f),new (0,4400),false);
             //背面AOE可以认为是5.9s的读条，在第3.5s时进行提示
             DrawPropertiesEdit propFanBack = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(6.1f),4300,false);
-            propFanBack.Rotation = (float)(Math.PI);
-            propFanBack.Radian = 2 * (float)(Math.PI) / 3;
+            propFanBack.Rotation = MathF.PI;
+            propFanBack.Radian = 2 * MathF.PI / 3;
             propFanBack.Delay = 3500;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Fan, propFanBack);
 
@@ -210,7 +217,7 @@ namespace TsingNamespace.AloaloIsland
 
             DrawPropertiesEdit propDonut = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(30.1f),4500,false);
             propDonut.InnerScale = new(7.9f);
-            propDonut.Radian = 2 * (float)(Math.PI);
+            propDonut.Radian = 2 * MathF.PI;
             propDonut.Delay = 13800;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Donut, propDonut);
         }
@@ -223,7 +230,7 @@ namespace TsingNamespace.AloaloIsland
             //accessory.Log.Debug($"Actived! => Mob 1 Hydro Shot Repulse Direction Draw");
             DrawPropertiesEdit propDisplacement = accessory.GetDrawPropertiesEdit(@event.GetTargetId(),new(1, 7),4500,false);
             propDisplacement.TargetPosition = @event.GetSourcePosition();
-            propDisplacement.Rotation = (float)(Math.PI);
+            propDisplacement.Rotation = MathF.PI;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Displacement, propDisplacement);
             
         }
@@ -519,8 +526,8 @@ namespace TsingNamespace.AloaloIsland
 
 
         //为吹气泡机制判断泡泡类型,同时画半圆
-        [ScriptMethod(name: "Boss 1 小泡泡 Boss 1 Blowing Bubbles Type", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16544|16551)$"], userControl: false)]
-        public void Boss1_BlowingBubblesType(Event @event, ScriptAccessory accessory)
+        [ScriptMethod(name: "Boss 1 小泡泡 Boss 1 Blowing Bubbles Type", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16544|16551)$"])]
+        public async void Boss1_BlowingBubblesType(Event @event, ScriptAccessory accessory)
         {
             //如果出现(-20,0,-17.5)的泡泡，则为顺时针
             Vector3 bubblePos = @event.GetSourcePosition();
@@ -528,6 +535,14 @@ namespace TsingNamespace.AloaloIsland
                 boss1_bubbleIsClockwise = boss1_bubbleIsClockwise || ((Math.Abs(bubblePos.X - (-20)) < 0.1) && (Math.Abs(bubblePos.Z - (-17.5)) < 0.1));
             }
             
+            /*
+            不知道为何，有时候Owner属性不生效，半圆会刷新在坐标(0,0,0)的位置
+            猜测可能是刚添加的实体并未同步到Objects中
+            2025.2.16尝试
+            增加延迟
+            */
+            await DelayMillisecond(50);
+
             DrawPropertiesEdit propFan = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(2.55f),16000,false);
             propFan.Offset = new(0, 0, -1.3f);
             propFan.Radian = MathF.PI;
@@ -701,7 +716,7 @@ namespace TsingNamespace.AloaloIsland
 
         //为钢铁月环标记水墙的危险区
         [ScriptMethod(name: "Boss 1 水墙 Boss 1 Twintides Bubble Type", eventType: EventTypeEnum.ObjectChanged, eventCondition: ["DataId:2013494", "Operate:Add"])]
-        public void Boss1_TwintidesBubbleType(Event @event, ScriptAccessory accessory)
+        public async void Boss1_TwintidesBubbleType(Event @event, ScriptAccessory accessory)
         {
             Vector3 bubblePos = @event.GetSourcePosition();
             if (((Math.Abs(bubblePos.Z - (-20)) < 0.1) && Math.Abs(Math.Abs(bubblePos.X) - 5) < 0.1)
@@ -718,9 +733,11 @@ namespace TsingNamespace.AloaloIsland
                 //最终存放的应该是后添加的泡泡
             }
             
+            await DelayMillisecond(50);
             DrawPropertiesEdit propRect = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(10, 20),6600-1400,false);
             propRect.Delay = 4000 + 1400;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, propRect);
+            // accessory.Log.Debug($"Actived! => Boss 1 Twintides Bubble Type");
         }
 
         /*
@@ -1096,13 +1113,13 @@ namespace TsingNamespace.AloaloIsland
                             : isCrystalOnNorthSide ? new (19,pos.Y,-15) : new (19,pos.Y,15);
             Vector3 endPoint_D1 = isCrystalOnEastSide
                             ? isCrystalOnNorthSide ? new (7.5f,pos.Y,12.5f) : new (7.5f,pos.Y,-12.5f)
-                            : isCrystalOnNorthSide ? new (14,pos.Y,-15) : new (14,pos.Y,15);
+                            : isCrystalOnNorthSide ? new (13,pos.Y,-15) : new (13,pos.Y,15);
 
             Vector3 startPoint_D2 = isCrystalOnEastSide
                             ? isCrystalOnNorthSide ? new (-19,pos.Y,-15) : new (-19,pos.Y,15)
                             : isCrystalOnNorthSide ? new (-7.5f,pos.Y,12.5f) : new (-7.5f,pos.Y,-12.5f);
             Vector3 endPoint_D2 = isCrystalOnEastSide
-                            ? isCrystalOnNorthSide ? new (-14,pos.Y,-15) : new (-14,pos.Y,15)
+                            ? isCrystalOnNorthSide ? new (-13,pos.Y,-15) : new (-13,pos.Y,15)
                             : isCrystalOnNorthSide ? new (-7.5f,pos.Y,12.5f) : new (-7.5f,pos.Y,-12.5f);
 
             List<Vector3> startPoints = new List<Vector3>();
@@ -1221,14 +1238,12 @@ namespace TsingNamespace.AloaloIsland
             {
                 return;
             }
-            //accessory.Log.Debug($"Actived! => Boss 2 Arcane Blight Safe Zone");
             float finalAngle = @event.GetSourceRotation() - MathF.PI;
             DrawPropertiesEdit dpFan = accessory.GetDrawPropertiesEdit(@event.GetSourceId(), new(20), 4500, true);
             dpFan.Radian = 0.5f * MathF.PI;
             dpFan.Rotation = - MathF.PI;
             dpFan.Color = accessory.Data.DefaultSafeColor.WithW(2.0f);
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Fan, dpFan);
-            //accessory.Log.Debug($"Boss 2 Arcane Blight Safe Zone : finalAngle => {finalAngle}");
         }
 
         [ScriptMethod(name: "Boss 2 双光球指路 Boss 2 double arcane globe guide", eventType: EventTypeEnum.StatusAdd, eventCondition: ["StatusID:regex:^(3726|3727|3728|3729)$"])]
@@ -1424,6 +1439,41 @@ namespace TsingNamespace.AloaloIsland
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : myFinalAngleTurnTowards => {myFinalAngleTurnTowards}");
         }
 
+        [ScriptMethod(name: "Boss 2 强制移动面向修正 Boss 2 Calculated Trajectory Towards Round", eventType: EventTypeEnum.StatusAdd, eventCondition: ["StatusID:regex:^(371[5-8])$"])]
+        public async void Boss2_CalculatedTrajectoryTowardsRound(Event @event, ScriptAccessory accessory)
+        {
+            if(@event.GetTargetId() != accessory.Data.Me)
+            {
+                return;
+            }
+            uint delayMs = @event.GetDurationMilliseconds();
+            delayMs = delayMs > 5000 ? delayMs : 5000;
+            if(await DelayMillisecond((int)delayMs - 5000))
+            {
+                return;
+            }
+            int directionCount = 4;
+            int per = 100;
+            int duration =  5000;
+            accessory.Log.Debug($"Boss 2 Calculated Trajectory Towards Round : count_per_duration => {directionCount},{per},{duration}");
+            int times = duration / per ;
+            for (int i = 0; i < times; i++)
+            {
+                IGameObject myGameObject = (IGameObject) accessory.Data.Objects.SearchByEntityId(accessory.Data.Me);
+                float _rot = myGameObject.Rotation;
+                int _rotCount = (int)Math.Round(_rot/(2 * MathF.PI / directionCount));
+                float rot = _rotCount * (2 * MathF.PI / directionCount);
+                unsafe
+                {
+                    FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* myGameObjectStruct = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)myGameObject.Address;
+                    myGameObjectStruct->SetRotation(rot);
+                }
+                if(await DelayMillisecond(per))
+                {
+                    break;
+                }
+            }
+        }
         /*
         如何计算扫雷的引导位置和面向角度
         检测读条34970, EffectPosition 的位置 移动 targetRotation x 4 获得AOE的中心位置
@@ -1669,38 +1719,38 @@ namespace TsingNamespace.AloaloIsland
 
             List<Vector3> template24_MT = new List<Vector3> 
             {
-                new (-16 + 200,-300,0), new (-11.5f + 200,-300,-3.5f), new (-4.5f + 200,-300,4)
+                new (-16 + 200,-300,0), new (-11.2f + 200,-300,-3.2f), new (-4.8f + 200,-300,4)
             };
             List<Vector3> template35_MT = new List<Vector3> 
             {
-                new (-11.5f + 200,-300,0), new (-19.5f + 200,-300,-3.5f), new (-12.5f + 200,-300,4)
+                new (-11.2f + 200,-300,0), new (-19.2f + 200,-300,-3.2f), new (-12.8f + 200,-300,4)
             };
 
             List<Vector3> template24_D1 = new List<Vector3> 
             {
-                new (-12.5f + 200,-300,4.5f), new (-11.5f + 200,-300,11.5f), new (-4.5f + 200,-300,4)
+                new (-12.8f + 200,-300,4.8f), new (-11.2f + 200,-300,11.2f), new (-4.8f + 200,-300,4)
             };
             List<Vector3> template35_D1 = new List<Vector3> 
             {
-                new (-11.5f + 200,-300,4.5f), new (-19.5f + 200,-300,11.5f), new (-12.5f + 200,-300,4)
+                new (-11.2f + 200,-300,4.8f), new (-19.2f + 200,-300,11.2f), new (-12.8f + 200,-300,4)
             };
 
             List<Vector3> template24_H1 = new List<Vector3> 
             {
-                new (3.5f + 200,-300,-3.5f), new (11.5f + 200,-300,-3.5f), new (4.5f + 200,-300,4)
+                new (3.2f + 200,-300,-3.2f), new (11.2f + 200,-300,-3.2f), new (4.8f + 200,-300,4)
             };
             List<Vector3> template35_H1 = new List<Vector3> 
             {
-                new (4.5f + 200,-300,-3.5f), new (3.5f + 200,-300,-3.5f), new (-3.5f + 200,-300,4)
+                new (4.8f + 200,-300,-3.2f), new (3.2f + 200,-300,-3.2f), new (-3.2f + 200,-300,4)
             };
 
             List<Vector3> template24_D2 = new List<Vector3> 
             {
-                new (3.5f + 200,-300,11.5f), new (11.5f + 200,-300,11.5f), new (4.5f + 200,-300,4)
+                new (3.2f + 200,-300,11.2f), new (11.2f + 200,-300,11.2f), new (4.8f + 200,-300,4)
             };
             List<Vector3> template35_D2 = new List<Vector3> 
             {
-                new (4.5f + 200,-300,11.5f), new (3.5f + 200,-300,11.5f), new (-3.5f + 200,-300,4)
+                new (4.8f + 200,-300,11.2f), new (3.2f + 200,-300,11.2f), new (-3.2f + 200,-300,4)
             };
 
             uint surgeVectorDebuffId = 3723 ;
@@ -2173,7 +2223,7 @@ namespace TsingNamespace.AloaloIsland
 
 
 
-
+        //TODO 在该机制中隐藏大火球
         [ScriptMethod(name: "Boss 3 第二次飞镖盘 Boss 3 Second Dart Board", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16478|16486)$"])]
         public async void Boss3_SecondDartBoard(Event @event, ScriptAccessory accessory)
         {
@@ -2182,6 +2232,20 @@ namespace TsingNamespace.AloaloIsland
                 //等待boss喷火读条信息收集完成
                 return;
             }
+            unsafe
+            {
+                // 隐藏大火球
+                uint NBallOfFireDataId = 0x4060;
+                uint SBallOfFireDataId = 0x4068;
+                List<IGameObject> _ball = accessory.GetEntitiesByDataId(NBallOfFireDataId).Union(accessory.GetEntitiesByDataId(SBallOfFireDataId)).ToList();
+                if(_ball.Count > 0)
+                {
+                    accessory.Log.Debug($"Boss 3 Second Dart Board : make ball of fire invisible");
+                    FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* _ballStructPtr = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*) (_ball[0].Address);
+                    _ballStructPtr->DrawObject->IsVisible = false;
+                }
+            }
+            
             accessory.Log.Debug($"Actived! => Boss 3 Second Dart Board");
             //火球顺逆时针
             bool isFireBallClockwise = boss3_isFireBallClockwise;
@@ -2209,10 +2273,10 @@ namespace TsingNamespace.AloaloIsland
             }
             bool isMeGetBurningChains = boss3_burningChainsPlayers.Contains(accessory.Data.Me);
             //以B点为新的正北点为模板
-            Vector3 burningChainsLeft_template = new (-200-0.5f,-200,-18.5f);
-            Vector3 burningChainsRight_template = new (-200-0.5f,-200,18.5f);
-            Vector3 noBurningChainsLeft_template = new (-200 + 18.5f,-200,-0.5f);
-            Vector3 noBurningChainsRight_template = new (-200 + 18.5f,-200,0.5f);
+            Vector3 burningChainsLeft_template = new (-200-0.8f,-200,-18.5f);
+            Vector3 burningChainsRight_template = new (-200-0.8f,-200,18.5f);
+            Vector3 noBurningChainsLeft_template = new (-200 + 18.5f,-200,-0.8f);
+            Vector3 noBurningChainsRight_template = new (-200 + 18.5f,-200,0.8f);
             int[] roleMarkPriority = new int[] { (int)RoleMarkEnum.MT, (int)RoleMarkEnum.H1, (int)RoleMarkEnum.D1, (int)RoleMarkEnum.D2};
             Vector3 myStartPoint = new (-200,-200,0);
             Vector3 myEndPoint = new (-200,-200,0);
@@ -2252,6 +2316,7 @@ namespace TsingNamespace.AloaloIsland
             myPointsList.Add(new float[]{myStartPoint.X,myStartPoint.Y,myStartPoint.Z,0,5300});
             myPointsList.Add(new float[]{myEndPoint.X,myEndPoint.Y,myEndPoint.Z,0,5000});
             MultiDisDraw(myPointsList,accessory);
+            boss3_fireSpreadRotation.Clear();
             accessory.Log.Debug($"Boss 3 Second Dart Board : my order number in party => {1 + accessory.GetMyIndex()}");
             accessory.Log.Debug($"Boss 3 Second Dart Board :isFireBallClockwise => {isFireBallClockwise}");
             accessory.Log.Debug($"Boss 3 Second Dart Board :isMeGetBurningChains => {isMeGetBurningChains}");
@@ -2412,10 +2477,12 @@ namespace TsingNamespace.AloaloIsland
             Vector4 colorGoNow = GuideColor_GoNow.V4.WithW(GuideColorDensity);
             Vector4 colorGoLater = GuideColor_GoLater.V4.WithW(GuideColorDensity);
             if(boss3_fireSpreadRotation.Count == 3){
-                colorGoNow = colorGoNow.WithW(colorGoNow.W + 8);
-                colorGoLater = colorGoLater.WithW(colorGoLater.W + 8);
+                colorGoNow = colorGoNow.WithW(colorGoNow.W + 12);
+                colorGoLater = colorGoLater.WithW(colorGoLater.W + 12);
             }
-            accessory.DrawWaypoints(pointsList,true,0,colorGoNow,colorGoLater);
+            float _width = Guide_Width > 0.09f ? Guide_Width : 0.1f;
+            _width = _width < 10.01f ? _width : 10f;
+            accessory.DrawWaypoints(pointsList,new(_width,_width * 0.5f + 0.1f),0,colorGoNow,colorGoLater);
         }
         private bool IsInSuppress(int suppressMillisecond,string methodName) {
             lock(_lock){
@@ -2678,6 +2745,7 @@ namespace TsingNamespace.AloaloIsland
                     break;
                 case uint position_id:
                     drawPropertiesEdit.Owner = position_id;
+                    drawPropertiesEdit.Position = null;
                     break;
                 default:
                     accessory.Log.Debug($"parm type error : position =>{position}");
@@ -2731,7 +2799,7 @@ namespace TsingNamespace.AloaloIsland
                 accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Displacement, drawPropertiesEdit);
             }
         }
-        public static void DrawWaypoints(this ScriptAccessory accessory,List<float[]> pointsList,bool circleAtPoint, long baseDelayMillis, Vector4 color_goNow, Vector4 color_goLater)
+        public static void DrawWaypoints(this ScriptAccessory accessory,List<float[]> pointsList,Vector2 width_radius, long baseDelayMillis, Vector4 color_goNow, Vector4 color_goLater)
         {
             long guideStartTimeMillis = baseDelayMillis;
             string guid = Guid.NewGuid().ToString();
@@ -2748,7 +2816,7 @@ namespace TsingNamespace.AloaloIsland
                 DrawPropertiesEdit drawPropertiesEdit_goNow = accessory.GetDrawPropertiesEdit(
                     name + count++
                     ,accessory.Data.Me
-                    ,new (1.5f)
+                    ,new (width_radius.X)
                     ,guideStartTimeMillis + (int)pointsList[i][3] - Math.Sign(i) * 270
                     ,(int)pointsList[i][4] - 100
                     ,color_goNow);
@@ -2756,12 +2824,12 @@ namespace TsingNamespace.AloaloIsland
                 drawPropertiesEdit_goNow.TargetPosition = new Vector3(pointsList[i][0], pointsList[i][1], pointsList[i][2]);
                 accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Displacement, drawPropertiesEdit_goNow);
             
-                if(circleAtPoint)
+                if(width_radius.Y > 0)
                 {
                     DrawPropertiesEdit drawPropertiesEdit_goNowEndCircle = accessory.GetDrawPropertiesEdit(
                     name + count++
                     ,drawPropertiesEdit_goNow.TargetPosition
-                    ,new((float)(0.2 + 0.5 * drawPropertiesEdit_goNow.Scale.X))
+                    ,new(width_radius.Y)
                     ,drawPropertiesEdit_goNow.Delay
                     ,drawPropertiesEdit_goNow.DestoryAt
                     ,color_goNow);
@@ -2773,7 +2841,7 @@ namespace TsingNamespace.AloaloIsland
                     DrawPropertiesEdit drawPropertiesEdit_goLater = accessory.GetDrawPropertiesEdit(
                         name + count++
                         ,new Vector3 (pointsList[i - 1][0], pointsList[i - 1][1], pointsList[i - 1][2])
-                        ,new (1.5f)
+                        ,new (width_radius.X)
                         ,baseDelayMillis + (int)pointsList[0][3]
                         ,guideStartTimeMillis - (baseDelayMillis + (int)pointsList[0][3]) - 100
                         ,color_goLater);
@@ -2781,12 +2849,12 @@ namespace TsingNamespace.AloaloIsland
                     drawPropertiesEdit_goLater.ScaleMode |= ScaleMode.YByDistance;
                     accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Displacement, drawPropertiesEdit_goLater);
 
-                    if(circleAtPoint)
+                    if(width_radius.Y > 0)
                     {
                         DrawPropertiesEdit drawPropertiesEdit_goLaterEndCircle = accessory.GetDrawPropertiesEdit(
                         name + count++
                         ,drawPropertiesEdit_goLater.TargetPosition
-                        ,new((float)(0.2 + 0.5 * drawPropertiesEdit_goLater.Scale.X))
+                        ,new(width_radius.Y)
                         ,drawPropertiesEdit_goLater.Delay
                         ,drawPropertiesEdit_goLater.DestoryAt - 100
                         ,color_goLater);
