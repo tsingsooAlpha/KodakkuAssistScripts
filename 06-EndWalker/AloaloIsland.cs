@@ -28,7 +28,7 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.6", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.7", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
@@ -527,7 +527,7 @@ namespace TsingNamespace.AloaloIsland
 
 
         //为吹气泡机制判断泡泡类型,同时画半圆
-        [ScriptMethod(name: "Boss 1 小泡泡 Boss 1 Blowing Bubbles Type", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16544|16551)$"])]
+        [ScriptMethod(name: "Boss 1 小泡泡 Boss 1 Blowing Bubbles Type", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16544|16551)$"], userControl: false)]
         public async void Boss1_BlowingBubblesType(Event @event, ScriptAccessory accessory)
         {
             //如果出现(-20,0,-17.5)的泡泡，则为顺时针
@@ -535,15 +535,19 @@ namespace TsingNamespace.AloaloIsland
             lock (_lock){
                 boss1_bubbleIsClockwise = boss1_bubbleIsClockwise || ((Math.Abs(bubblePos.X - (-20)) < 0.1) && (Math.Abs(bubblePos.Z - (-17.5)) < 0.1));
             }
-            
+        }
+
+        [ScriptMethod(name: "Boss 1 小泡泡危险区 Boss 1 Blowing Bubbles Dangerous Zone", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16544|16551)$"])]
+        public async void Boss1_BlowingBubblesDangerousZone(Event @event, ScriptAccessory accessory)
+        {
             /*
             不知道为何，有时候Owner属性不生效，半圆会刷新在坐标(0,0,0)的位置
             猜测可能是刚添加的实体并未同步到Objects中
             2025.2.16尝试
             增加延迟
+            2025.2.20
+            增加延迟2无效
             */
-            await DelayMillisecond(50);
-
             DrawPropertiesEdit propFan = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(2.55f),16000,false);
             propFan.Offset = new(0, 0, -1.3f);
             propFan.Radian = MathF.PI;
@@ -715,9 +719,9 @@ namespace TsingNamespace.AloaloIsland
 
 
 
-        //为钢铁月环标记水墙的危险区
-        [ScriptMethod(name: "Boss 1 水墙 Boss 1 Twintides Bubble Type", eventType: EventTypeEnum.ObjectChanged, eventCondition: ["DataId:2013494", "Operate:Add"])]
-        public async void Boss1_TwintidesBubbleType(Event @event, ScriptAccessory accessory)
+
+        [ScriptMethod(name: "Boss 1 水墙 Boss 1 Twintides Bubble Type", eventType: EventTypeEnum.ObjectChanged, eventCondition: ["DataId:2013494", "Operate:Add"], userControl: false)]
+        public void Boss1_TwintidesBubbleType(Event @event, ScriptAccessory accessory)
         {
             Vector3 bubblePos = @event.GetSourcePosition();
             if (((Math.Abs(bubblePos.Z - (-20)) < 0.1) && Math.Abs(Math.Abs(bubblePos.X) - 5) < 0.1)
@@ -733,13 +737,17 @@ namespace TsingNamespace.AloaloIsland
                 boss1_twintidesBubbleType = bubblePos;
                 //最终存放的应该是后添加的泡泡
             }
-            
-            await DelayMillisecond(50);
+        }
+        //为钢铁月环标记水墙的危险区
+        [ScriptMethod(name: "Boss 1 钢铁月环水墙危险区 Boss 1 Twintides Bubble Dangerous Zone", eventType: EventTypeEnum.ObjectChanged, eventCondition: ["DataId:2013494", "Operate:Add"])]
+        public async void Boss1_TwintidesBubbleDangerousZone(Event @event, ScriptAccessory accessory)
+        {
             DrawPropertiesEdit propRect = accessory.GetDrawPropertiesEdit(@event.GetSourceId(),new(10, 20),6600-1400,false);
             propRect.Delay = 4000 + 1400;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, propRect);
             // accessory.Log.Debug($"Actived! => Boss 1 Twintides Bubble Type");
         }
+
 
         /*
         圆浪连潮35532(5.0s) 环浪连潮35534(5.0s)
@@ -1461,6 +1469,10 @@ namespace TsingNamespace.AloaloIsland
             for (int i = 0; i < times; i++)
             {
                 IGameObject myGameObject = (IGameObject) accessory.Data.Objects.SearchByEntityId(accessory.Data.Me);
+                if(myGameObject == null)
+                {
+                    break;
+                }
                 float _rot = myGameObject.Rotation;
                 int _rotCount = (int)Math.Round(_rot/(2 * MathF.PI / directionCount));
                 float rot = _rotCount * (2 * MathF.PI / directionCount);
