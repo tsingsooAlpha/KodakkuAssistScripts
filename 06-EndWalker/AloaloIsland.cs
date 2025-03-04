@@ -28,7 +28,7 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.7", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.8", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
