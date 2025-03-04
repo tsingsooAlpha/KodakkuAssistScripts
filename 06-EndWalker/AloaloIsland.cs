@@ -34,20 +34,7 @@ namespace TsingNamespace.AloaloIsland
         const string noteStr =
         """
         基于猫猫窝攻略 ; Boss 1 默认采用融合法, 可前往用户设置修改.
-
-        0.0.0.6
-            1.视觉调整: 指路的宽度和落点尺寸微调;
-            2.视觉调整: 加大 Boss 3 第二次转盘机制指路颜色深度;
-            3.视觉调整: 隐藏 Boss 3 第二次转盘的大火球;
-            4.功能添加: Boss 2 强制移动debuff末5s可启用面向修正(默认关闭);
-                         ↑将面向修正到距离当前面向夹角最小的正东南西北方向
-            5.功能添加: 可自定义指路特效宽度(最小值为0.1,最大值为10);
-        0.0.0.3
-            1.添加 Boss 1 第一次水晶机制指路的依据类型 : 
-                融合法(RongHeFa), 南北法(NanBeiFa), 排队法(PaiDuiFa);
-            2.修改 Boss 2 面向指引颜色调整为和GuideColor_GoNow一致;
-            3.修改 Boss 2 面向指引绘图方式固定为Vfx;
-            4.添加 Boss 2 立体爆雷战术机制的相关指路内容;
+        Boss2 提供面向修正功能，可前往用户设置启用.
         """;
         [UserSetting("指路时使用的颜色 => 类型: 立即前往")]
         public ScriptColor GuideColor_GoNow { get; set; } = new() { V4 = new(0, 1, 1, 2) };
@@ -247,7 +234,7 @@ namespace TsingNamespace.AloaloIsland
 
         #region Boss1
         //BOSS模型移除，通常用于初始化信息
-        [ScriptMethod(name: "Boss RemoveCombatant", eventType: EventTypeEnum.RemoveCombatant, eventCondition: ["DataId:9020"], userControl: false)]
+        [ScriptMethod(name: "Boss RemoveCombatant", eventType: EventTypeEnum.RemoveCombatant, eventCondition: ["DataId:regex:^(16540|16547|16446|16604|16477|16485)$"], userControl: false)]
         public async void BossCombatantInitialize(Event @event, ScriptAccessory accessory)
         {
             if (IsInSuppress(2000, nameof(BossCombatantInitialize))){
@@ -2755,6 +2742,10 @@ namespace TsingNamespace.AloaloIsland
             {
                 case Vector3 position_v3:
                     drawPropertiesEdit.Position = position_v3;
+                    break;
+                case ulong position_id_ulong:
+                    drawPropertiesEdit.Owner = position_id_ulong;
+                    drawPropertiesEdit.Position = null;
                     break;
                 case uint position_id:
                     drawPropertiesEdit.Owner = position_id;
