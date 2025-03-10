@@ -28,13 +28,14 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.8", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632e", version: "0.0.0.9", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
         """
         基于猫猫窝攻略 ; Boss 1 默认采用融合法, 可前往用户设置修改.
         Boss2 提供面向修正功能，可前往用户设置启用.
+        Boss2 双光球+步进地火时可单独设置面向指示颜色深度.
         """;
         [UserSetting("指路时使用的颜色 => 类型: 立即前往")]
         public ScriptColor GuideColor_GoNow { get; set; } = new() { V4 = new(0, 1, 1, 2) };
@@ -51,6 +52,9 @@ namespace TsingNamespace.AloaloIsland
 
         [UserSetting("Boss 2 平面魔纹战术(扫雷)强制移动启用面向修正")]
         public bool Boss2_TowardsRound { get; set; } = false;
+
+        [UserSetting("Boss 2 面向指示颜色深度增值")]
+        public float Boss2_PizzaColorDeepen { get; set; } = 2;
 
         // Kod内部小队成员序号(与游戏内小队成员列表顺序无关，与指令/KTeam打开的窗口有关)与职能的对应关系。
         // 0-MT,1-H1,2-D1,3-D2
@@ -123,6 +127,13 @@ namespace TsingNamespace.AloaloIsland
         {
             accessory.Log.Debug($"Initialize! => AloaloIslandScript");
             accessory.Method.RemoveDraw(".*");
+            dataId_entityIds.Clear();
+            foreach (uint _dataId in Enum.GetValues(typeof(Mob_Bundle.IdData)))
+            {
+                List<uint> _entityIds = new List<uint>();
+                dataId_entityIds.AddOrUpdate(_dataId, key => _entityIds, (key, oldValue) => _entityIds);
+            }
+            Woodens = new uint[4] {1,1,1,1}; 
             //springCrystalsCount = 0;
             boss1_springCrystalsSafePoints.Clear();
             // boss1_flukeGaleCastingCount = 0;
@@ -151,6 +162,331 @@ namespace TsingNamespace.AloaloIsland
         }
 
         #region Mob1
+        /*
+            目标过滤
+            在第一波小怪刷新的时候，仅放出皮皮虾可选中
+            在皮皮虾第一下平A触发时，放出螃蟹可选中
+            在螃蟹血量低于25%时，放出水炮三连哥
+            在水泡三连哥血量低于25%时，放出最后的
+
+            强制放出，当平A触发时强制放出(可能是被提前开了)
+        */
+        
+        private static class Mob_Bundle
+        {
+            public enum IdData : uint
+            {
+                NTwister = 35776, // 风圈动作 Helper->self, 0.5s cast, range 6 circle
+                STwister = 35791, // Helper->self, 0.5s cast, range 6 circle
+                NKiwakin = 0x40C8, // R3.750, x1 皮皮虾
+                NSnipper = 0x40C9, // R3.600, x1 大螃蟹
+                NCrab = 0x40CA, // R1.120, x2 小螃蟹
+                NMonk = 0x40CB, // R3.000, x1 超痛单点击退章鱼哥
+                NRay = 0x40CC, // R3.200, x1 水化炮三连哥
+                NPaddleBiter = 0x40CD, // R1.650, x2 水化炮三连哥的小弟
+
+                SKiwakin = 0x40D2, // R3.750, x1 皮皮虾
+                SSnipper = 0x40D3, // R3.600, x1 大螃蟹
+                SCrab = 0x40D4, // R1.120, x2 小螃蟹
+                SMonk = 0x40D5, // R3.000, x1 超痛单点击退章鱼哥
+                SRay = 0x40D6, // R3.200, x1 水化炮三连哥
+                SPaddleBiter = 0x40D7, // R1.650, x2 水化炮三连哥的小弟
+                NWoodGolem = 0x40D0, // R2.660 龙卷树人
+                NIslekeeper = 0x40D1, // R2.550 DOT树人
+
+                SWoodGolem = 0x40DA, // R2.660 龙卷树人
+                SIslekeeper = 0x40DB, // R2.550 DOT树人
+
+                AutoAttack1 = 31318, // *Kiwakin/*Crab/*Snipper->player, no cast, single-target
+                AutoAttack2 = 31320, // *PaddleBiter/*Ray/*Monk->player, no cast, single-target *WoodGolem/*Islekeeper->player, no cast, single-target
+
+                NAncientAero = 35916, // NWoodGolem->self, 5.0s cast, range 100 circle, interruptible heavy raidwide
+                NTornado = 35917, // NWoodGolem->player, 5.0s cast, range 4 circle spread
+                NOvation = 35777, // NWoodGolem->self, 4.0s cast, range 12 width 4 rect
+                SAncientAero = 35794, // SWoodGolem->self, 5.0s cast, range 100 circle, interruptible heavy raidwide
+                STornado = 35795, // SWoodGolem->player, 5.0s cast, range 4 circle spread
+                SOvation = 35796, // SWoodGolem->self, 4.0s cast, range 12 width 4 rect
+
+                NIsleDrop = 35951, // NIslekeeper->location, 5.0s cast, range 6 circle puddle
+                SIsleDrop = 35900, // SIslekeeper->location, 5.0s cast, range 6 circle puddle
+
+                NLeadHook = 35950, // 皮皮虾三连死刑 NKiwakin->player, 4.0s cast, single-target, 3-hit tankbuster
+                SLeadHook = 35783, // SKiwakin->player, 4.0s cast, single-target, 3-hit tankbuster
+                NSharpStrike = 35939, // 皮皮虾Dot死刑 NKiwakin->player, 5.0s cast, single-target, tankbuster
+                SSharpStrike = 35784, // SKiwakin->player, 5.0s cast, single-target, tankbuster
+                NCrabDribble = 35770, // 螃蟹 后刀 NSnipper->self, 1.5s cast, range 6 120-degree cone
+                SCrabDribble = 35787, // SSnipper->self, 1.5s cast, range 6 120-degree cone
+                NCrossAttack = 35771, // 章鱼哥死刑 NMonk->player, 5.0s cast, single-target tankbuster
+                SCrossAttack = 35919, // SMonk->player, 5.0s cast, single-target tankbuster
+            }
+            public const string FilterDataIdWithKiwakin = "TargetDataId:regex:^(1658[4-9]|1659[4-9]|1659[2-3]|1660[2-3])$";
+            public const string FilterDataId = "DataId:regex:^(1658[5-9]|1659[5-9]|1659[2-3]|1660[2-3])$";
+            public const string AutoAttackActionId = $"ActionId:regex:^(31318|31320)$";
+            public const string TornadoTwisterActionId = $"ActionId:regex:^(35776|35791)$";
+            public const string WoodGolemTornadoActionId = $"ActionId:regex:^(35917|35795)$";
+            public const string WoodGolemOvationActionId = $"ActionId:regex:^(35777|35796)$";
+            public const string IslekeeperIsleDropActionId = $"ActionId:regex:^(35951|35900)$";
+            public const string LeadHookActionId = $"ActionId:regex:^(35950|35783)$";
+            public const string SharpStrikeActionId = $"ActionId:regex:^(35939|35784)$";
+            public const string CrabDribbleActionId = $"ActionId:regex:^(35770|35787)$";
+            public const string CrossAttackActionId = $"ActionId:regex:^(35771|35919)$";
+
+            public const string AutoAttackActionId_Player = $"ActionId:regex:^(7|8)$";
+            public static Vector3 Mob2_FieldCenter = new (200,-306,128);
+            
+        }
+        private uint[] Woodens = new uint[4] {1,1,1,1};
+        private ConcurrentDictionary<uint,List<uint>> dataId_entityIds = new ConcurrentDictionary<uint, List<uint>>();
+        [ScriptMethod(name: "小怪 刷新时不可选中(皮皮虾和树人1除外) Mob Target Disable", eventType: EventTypeEnum.AddCombatant, eventCondition: [Mob_Bundle.FilterDataId])]
+        public async void Mob_TargetDisable(Event @event, ScriptAccessory accessory)
+        {
+            await Task.Delay(3000);
+            uint _id = @event.GetSourceId();
+            uint _dataId = @event.GetDataId();
+            if(dataId_entityIds.TryGetValue(_dataId, out List<uint> _entityIds))
+            {
+                lock(_lock){
+                    _entityIds.Add(_id);
+                }
+                DisTargetable(_id,accessory);
+            }
+
+            //按照坐标给树人编号
+            List<uint> _woodens = new List<uint>
+            {
+                (uint)Mob_Bundle.IdData.NWoodGolem,
+                (uint)Mob_Bundle.IdData.SWoodGolem,
+                (uint)Mob_Bundle.IdData.NIslekeeper,
+                (uint)Mob_Bundle.IdData.SIslekeeper
+            };
+            if (_woodens.Contains(_dataId))
+            {
+                lock(_lock)
+                {
+                    //是树人
+                    Vector3 _woodenPos = @event.GetSourcePosition();
+                    Vector3 centerToWooden = _woodenPos - Mob_Bundle.Mob2_FieldCenter;
+                    if(centerToWooden.X < 0)
+                    {
+                        if(centerToWooden.Z < 0)
+                        {
+                            Woodens[0] = _id;
+                        }
+                        else
+                        {
+                            Woodens[3] = _id;
+                        }
+                    }
+                    else
+                    {
+                        if(centerToWooden.Z < 0)
+                        {
+                            Woodens[1] = _id;
+                        }
+                        else
+                        {
+                            Woodens[2] = _id;
+                        }
+                    }
+                    if(_id == Woodens[0])
+                    {
+                        SetTargetable(_id, accessory);
+                    }
+                }
+            }
+            
+        }
+        [ScriptMethod(name: "小怪 平A触发时强制启用可选中 Mob Target Enable When AutoAttack", eventType: EventTypeEnum.ActionEffect, eventCondition: [Mob_Bundle.AutoAttackActionId])]
+        public void Mob_TargetEnableWhenAutoAttack(Event @event, ScriptAccessory accessory)
+        {
+            
+            uint _id = @event.GetSourceId();
+            //查找Id是否存在与dict中
+            IGameObject? _sourceObject = accessory.Data.Objects.SearchByEntityId(_id);
+            if(_sourceObject != null && dataId_entityIds.ContainsKey(_sourceObject.DataId))
+            {
+                SetTargetable(_id, accessory);
+            }
+            //当皮皮虾平A触发时,放出螃蟹可选中
+            if(_sourceObject != null && (_sourceObject.DataId == (uint)Mob_Bundle.IdData.NKiwakin || _sourceObject.DataId == (uint)Mob_Bundle.IdData.SKiwakin))
+            {
+                //收集螃蟹组Id
+                accessory.Log.Debug($"Mob Target Enable When AutoAttack => Kiwakin AutoAttack");
+                uint[] _dataIds = new uint[]
+                {
+                    (uint)Mob_Bundle.IdData.NSnipper,(uint)Mob_Bundle.IdData.SSnipper,
+                    (uint)Mob_Bundle.IdData.NCrab,(uint)Mob_Bundle.IdData.SCrab
+                };
+                SetTargetable(_dataIds,dataId_entityIds,accessory);
+            }
+        }
+        //TODO 收到小怪死亡信息时强制放出下一组
+        [ScriptMethod(name: "小怪 当前组死亡时下一组启用可选中 Mob Target Enable When Death", eventType: EventTypeEnum.Death, eventCondition: [Mob_Bundle.FilterDataIdWithKiwakin])]
+        public async void Mob_TargetEnableWhenDeath(Event @event, ScriptAccessory accessory)
+        {
+            uint mobDataId = @event.GetTargetDataId();
+            uint _id = @event.GetTargetId();
+            accessory.Log.Debug($"Mob Target Enable When Death mobDataId => {mobDataId}");
+            uint[] _dataIds = new uint[]{0};
+            switch(mobDataId)
+            {
+                case (uint)Mob_Bundle.IdData.NKiwakin:
+                case (uint)Mob_Bundle.IdData.SKiwakin:
+                    //皮皮虾死了，放出螃蟹组
+                    _dataIds = new uint[]
+                    {
+                        (uint)Mob_Bundle.IdData.NSnipper,(uint)Mob_Bundle.IdData.SSnipper,
+                        (uint)Mob_Bundle.IdData.NCrab,(uint)Mob_Bundle.IdData.SCrab
+                    };
+                    break;
+                case (uint)Mob_Bundle.IdData.NSnipper:
+                case (uint)Mob_Bundle.IdData.SSnipper:
+                    //螃蟹死, 放出水泡组
+                    _dataIds = new uint[]
+                    {
+                        (uint)Mob_Bundle.IdData.NRay,(uint)Mob_Bundle.IdData.SRay,
+                        (uint)Mob_Bundle.IdData.NPaddleBiter,(uint)Mob_Bundle.IdData.SPaddleBiter
+                    };
+                    break;
+                case (uint)Mob_Bundle.IdData.NRay:
+                case (uint)Mob_Bundle.IdData.SRay:
+                    //水炮三连哥死了, 放出章鱼哥
+                    _dataIds = new uint[]
+                    {
+                        (uint)Mob_Bundle.IdData.NMonk,(uint)Mob_Bundle.IdData.SMonk
+                    };
+                    break;
+                case (uint)Mob_Bundle.IdData.NMonk:
+                case (uint)Mob_Bundle.IdData.SMonk:
+                    break;
+                case (uint)Mob_Bundle.IdData.NWoodGolem:
+                case (uint)Mob_Bundle.IdData.SWoodGolem:
+                case (uint)Mob_Bundle.IdData.NIslekeeper:
+                case (uint)Mob_Bundle.IdData.SIslekeeper:
+                    uint[] woodensIndex = Woodens;
+                    int _index = Array.IndexOf(woodensIndex, _id);
+                    if (_index > -1 && _index < woodensIndex.Length - 1)
+                    {
+                        uint _nextWoodenId = woodensIndex[_index + 1];
+                        SetTargetable(_nextWoodenId, accessory);
+                    }
+                    break;
+            }
+            SetTargetable(_dataIds,dataId_entityIds,accessory);
+        }
+        [ScriptMethod(name: "小怪 当前组将要死亡时下一组启用可选中 Mob Target Enable When Round End", eventType: EventTypeEnum.ActionEffect, eventCondition: [Mob_Bundle.AutoAttackActionId_Player])]
+        public void Mob_TargetEnableWhenRoundEnd(Event @event, ScriptAccessory accessory)
+        {
+            uint _id = @event.GetTargetId();
+            //查找Id是否存在与dict中
+            ICharacter? _targetObject = accessory.Data.Objects.SearchByEntityId(_id) as ICharacter;
+            if(_targetObject != null && dataId_entityIds.ContainsKey(_targetObject.DataId))
+            {
+                float hpPer = (float)_targetObject.CurrentHp / (float)_targetObject.MaxHp;
+                if(hpPer < 0.25f)
+                {
+                    uint[] _dataIds = new uint[]{1};
+                    switch(_targetObject.DataId)
+                    {
+                        case (uint)Mob_Bundle.IdData.NSnipper:
+                        case (uint)Mob_Bundle.IdData.SSnipper:
+                            accessory.Log.Debug($"Mob Target Enable When Round End hpPer => {hpPer}");
+                            //螃蟹要死了, 放出水泡组
+                            _dataIds = new uint[]
+                            {
+                                (uint)Mob_Bundle.IdData.NRay,(uint)Mob_Bundle.IdData.SRay,
+                                (uint)Mob_Bundle.IdData.NPaddleBiter,(uint)Mob_Bundle.IdData.SPaddleBiter
+                            };
+                            accessory.Log.Debug($"Mob Target Enable When Round End _dataIds => {_dataIds[0]}");
+                            break;
+                        case (uint)Mob_Bundle.IdData.NRay:
+                        case (uint)Mob_Bundle.IdData.SRay:
+                            accessory.Log.Debug($"Mob Target Enable When Round End hpPer => {hpPer}");
+                            //水炮三连哥要死了, 放出章鱼哥
+                            _dataIds = new uint[]
+                            {
+                                (uint)Mob_Bundle.IdData.NMonk,(uint)Mob_Bundle.IdData.SMonk
+                            };
+                            accessory.Log.Debug($"Mob Target Enable When Round End _dataIds => {_dataIds[0]}");
+                            break;
+                        case (uint)Mob_Bundle.IdData.NWoodGolem:
+                        case (uint)Mob_Bundle.IdData.SWoodGolem:
+                        case (uint)Mob_Bundle.IdData.NIslekeeper:
+                        case (uint)Mob_Bundle.IdData.SIslekeeper:
+                            accessory.Log.Debug($"Mob Target Enable When Round End hpPer => {hpPer}");
+                            uint[] woodensIndex = Woodens;
+                            int _index = Array.IndexOf(woodensIndex, _id);
+                            if (_index > -1 && _index < woodensIndex.Length - 1)
+                            {
+                                uint _nextWoodenId = woodensIndex[_index + 1];
+                                SetTargetable(_nextWoodenId, accessory);
+                            }
+                            accessory.Log.Debug($"Mob Target Enable When Round End _dataIds => {_dataIds[0]}");
+                            break;
+                    }
+                    SetTargetable(_dataIds,dataId_entityIds,accessory);
+                }
+
+            }
+        }
+        private void SetTargetable(uint _id, ScriptAccessory accessory)
+        {
+            IGameObject? _targetObject = accessory.Data.Objects.SearchByEntityId(_id);
+            if(_targetObject != null && !_targetObject.IsDead && !_targetObject.IsTargetable)
+            {
+                accessory.Log.Debug($"Set Targetable => {_targetObject}");
+                unsafe
+                {
+                  FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* _targetObjectStruct = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)_targetObject.Address;
+                  _targetObjectStruct-> TargetableStatus |= FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectTargetableFlags.IsTargetable;
+                }
+            }
+        }
+        private void DisTargetable(uint _id, ScriptAccessory accessory)
+        {
+            IGameObject? _targetObject = accessory.Data.Objects.SearchByEntityId(_id);
+            if(_targetObject != null && _targetObject.IsTargetable)
+            {
+                accessory.Log.Debug($"Dis Targetable => {_targetObject}");
+                unsafe
+                {
+                  FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject* _targetObjectStruct = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)_targetObject.Address;
+                  _targetObjectStruct-> TargetableStatus &= ~FFXIVClientStructs.FFXIV.Client.Game.Object.ObjectTargetableFlags.IsTargetable;
+                }
+            }
+        }
+        
+        private void SetTargetable(uint[] _dataIds,ConcurrentDictionary<uint,List<uint>> _dict, ScriptAccessory accessory)
+        {
+            List<uint> entityIds = new List<uint>();
+            List<IGameObject> entityIBattleCharas = new List<IGameObject>();
+            foreach (uint _dataId in _dataIds)
+            {
+                if(_dict.TryGetValue(_dataId, out List<uint> _entityIds))
+                {
+                    entityIds = entityIds.Union(_entityIds).ToList();
+                }
+                // 查找目前该dataID的目标
+                IEnumerable<IGameObject> _temp = accessory.GetEntitiesByDataId(_dataId).Where(obj => obj is IBattleChara bcObj && bcObj.MaxHp > 10000);
+                entityIBattleCharas = entityIBattleCharas.Union(_temp).ToList();
+            }
+            foreach (uint _entityId in entityIds)
+            {
+                IGameObject? _entityObject = accessory.Data.Objects.SearchByEntityId(_entityId);
+                if(_entityObject != null && _dict.ContainsKey(_entityObject.DataId))
+                {
+                    SetTargetable(_entityId, accessory);
+                }
+            }
+            foreach (IGameObject obj in entityIBattleCharas)
+            {
+                SetTargetable(obj.EntityId, accessory);
+            }
+        }
+
+
+
+
         //给第一组小怪场地上的风圈，绘制危险区与危险区预提醒
         [ScriptMethod(name: "小怪 1 风圈 Mob 1 Tornado Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: ["ActionId:regex:^(35776|35791)$"])]
         public void Mob1_TornadoDangerousZoneDraw(Event @event, ScriptAccessory accessory)
@@ -1312,8 +1648,8 @@ namespace TsingNamespace.AloaloIsland
             }
 
             Vector4 color = GuideColor_GoNow.V4;
-            accessory.DrawTurnTowards(arcaneGlobePos1,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(0,5500),color.WithW(color.W + 2),true);
-            accessory.DrawTurnTowards(arcaneGlobePos2,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(9500,5500),color.WithW(color.W + 2),true);
+            accessory.DrawTurnTowards(arcaneGlobePos1,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(0,5500),color.WithW(color.W + Boss2_PizzaColorDeepen),true);
+            accessory.DrawTurnTowards(arcaneGlobePos2,new(20,0.33f*MathF.PI,myBaseAngle),new(9,5f),new(9500,5500),color.WithW(color.W + Boss2_PizzaColorDeepen),true);
             
             accessory.Log.Debug($"Boss 2 double arcane globe guide: arcaneGlobePos1 => {arcaneGlobePos1}");
             accessory.Log.Debug($"Boss 2 double arcane globe guide: arcaneGlobePos2 => {arcaneGlobePos2}");
@@ -1424,7 +1760,7 @@ namespace TsingNamespace.AloaloIsland
 
             Vector2 delay_destoryAt = myStatusId >= 3726 ? new(7000,4500) : new (2000,9000);
             Vector4 _color = GuideColor_GoNow.V4;
-            Vector4 color = _color.WithW(_color.W + (myStatusId >= 3726 ? 2 : 0));
+            Vector4 color = _color.WithW(_color.W + (myStatusId >= 3726 ? Boss2_PizzaColorDeepen : 0));
             accessory.DrawTurnTowards(myTowardsObj,new(20,0.33f*MathF.PI,myFinalAngleTurnTowards),new(9,5f),delay_destoryAt,color,true);
 
             accessory.Log.Debug($"Boss 2 Targeted Light Guide : myTowardsObj => {myTowardsObj}");
@@ -2535,6 +2871,10 @@ namespace TsingNamespace.AloaloIsland
         public static uint GetTargetId(this Event @event)
         {
             return ParseHexId(@event["TargetId"], out uint id) ? id : 0;
+        }
+        public static uint GetTargetDataId(this Event @event)
+        {
+            return JsonConvert.DeserializeObject<uint>(@event["TargetDataId"] ?? "0");
         }
 
         public static uint GetTargetIndex(this Event @event)
