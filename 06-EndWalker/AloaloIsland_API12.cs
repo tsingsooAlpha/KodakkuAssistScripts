@@ -13,22 +13,23 @@ using KodakkuAssist.Script;
 using KodakkuAssist.Module.GameEvent.Struct;
 using KodakkuAssist.Module.Draw;
 using KodakkuAssist.Module.Draw.Manager;
+using KodakkuAssist.Data;
 using Dalamud.Utility.Numerics;
 using ECommons;
-//using ECommons.GameFunctions;
-//using ECommons.DalamudServices;
+// using ECommons.GameFunctions;
+// using ECommons.DalamudServices;
 using Dalamud.Game;
-using Dalamud.Game.ClientState.Objects.Types;
+// using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Statuses;
-//using System.Reflection;
-using IGameObject = KodakkuAssist.Data.IGameObject;
+using IBattleCharaDalamud = Dalamud.Game.ClientState.Objects.Types.IBattleChara;
+// using System.Reflection;
 using Util = TsingNamespace.AloaloIsland.TsingUtilities;
 using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.0.9", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.0", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
@@ -3007,14 +3008,20 @@ namespace TsingNamespace.AloaloIsland
 
             if(accessory.Data.Objects.SearchByEntityId(entityId) is IBattleChara entityObject)
             {
-                foreach (Status status in entityObject.StatusList)
+                unsafe
                 {
-                    if (status.StatusId == statusId)
+                    FFXIVClientStructs.FFXIV.Client.Game.Character.BattleChara* charaStruct = (FFXIVClientStructs.FFXIV.Client.Game.Character.BattleChara*)entityObject.Address;
+                    StatusList statusList = StatusList.CreateStatusListReference((nint)(charaStruct->GetStatusManager()));
+                    foreach (Status status in statusList)
                     {
-                        statusInfo = status;
-                        break;
+                        if (status.StatusId == statusId)
+                        {
+                            statusInfo = status;
+                            break;
+                        }
                     }
                 }
+
             }
             return statusInfo;
         }
@@ -3453,6 +3460,7 @@ namespace TsingNamespace.AloaloIsland
             }catch(Exception){
                 //被其他意外取消了
                 return true;
+                // return true;
             }
         }
     }
