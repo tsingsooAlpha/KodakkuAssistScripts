@@ -6,5 +6,13 @@
         "Author": "Mao",
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland.cs",
         "UpdateInfo": "0.0.0.9: \n  1. 小怪组添加目标筛选功能: 当上一组小怪未击杀前，下一组小怪目标不可选中(蟹老板组会在皮皮虾平A时放出);树人分组策略采用MMW的攻略\n  2. Boss2新增面向指示颜色深度增值,该值会加深双光球+步进式地火时,面向指示的颜色深度"
+    },
+    {
+        "Name": "[国际服]阿罗阿罗岛绘图+指路",
+        "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2632a",
+        "Version": "0.0.0.9",
+        "Author": "Mao",
+        "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland_API12.cs",
+        "UpdateInfo": "尚未更新内容，仅完成API12的匹配更新"
     }
 ]
