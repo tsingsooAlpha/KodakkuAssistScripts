@@ -10,7 +10,7 @@
     {
         "Name": "[国际服]阿罗阿罗岛绘图+指路",
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2632a",
-        "Version": "0.0.1.0",
+        "Version": "0.0.1.1",
         "Author": "Mao",
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland_API12.cs",
         "UpdateInfo": "尚未更新内容，仅完成API12的匹配更新"
