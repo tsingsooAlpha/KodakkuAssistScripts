@@ -20,16 +20,18 @@ using ECommons;
 // using ECommons.DalamudServices;
 using Dalamud.Game;
 // using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Game.ClientState.Statuses;
-using IBattleCharaDalamud = Dalamud.Game.ClientState.Objects.Types.IBattleChara;
+// using Dalamud.Game.ClientState.Statuses;
+// using IBattleCharaDalamud = Dalamud.Game.ClientState.Objects.Types.IBattleChara;
 // using System.Reflection;
 using Util = TsingNamespace.AloaloIsland.TsingUtilities;
 using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
+using Status = Dalamud.Game.ClientState.Statuses.Status;
+using StatusList = Dalamud.Game.ClientState.Statuses.StatusList;
 
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.0", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.1", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
