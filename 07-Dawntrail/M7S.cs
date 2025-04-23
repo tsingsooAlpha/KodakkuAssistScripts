@@ -1,0 +1,754 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+
+
+using Newtonsoft.Json;
+
+using KodakkuAssist.Data;
+using KodakkuAssist.Extensions;
+using KodakkuAssist.Module.GameEvent;
+using KodakkuAssist.Module.Draw;
+using KodakkuAssist.Module.Draw.Manager;
+using KodakkuAssist.Script;
+
+using Dalamud.Utility.Numerics;
+
+
+using Util = TsingNamespace.Dawntrail.Savage.M7S.Utilities_Tsing;
+
+
+namespace TsingNamespace.Dawntrail.Savage.M7S
+{
+    [ScriptType(name: "M7S", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f",territorys: [1261], version: "0.0.0.1", author: "Mao" ,note: noteStr)]
+    public class M7S_Script
+    {
+
+        /*
+            TODO:
+            1.远近死刑时的钢铁月环读条是否存在一个特定的实体读条钢铁月环AOE, 不必记录 LatestStoneringerId 也可知道是钢铁还是月环？
+                ↑是的
+
+        
+        */
+        const string noteStr = "";
+
+        private static readonly object _lock = new object();
+        private uint LatestStoneringerId = 0;
+        private List<IGameObject> WildwindsMobs = new List<IGameObject>();
+        private uint ExplosionCount = 0;
+        private uint StrangeSeedsCount = 0;
+
+        private bool IsAbominableBlinkCasting = false;
+        private bool IsLashingLariatCasting = false;
+        private uint LashingLariatCastingCount = 0; // 标记冲锋释放次数, 同时也作为P3开始的标记
+
+
+        [UserSetting("P2冰花着色 => 类型: 奇数轮次")]
+        public ScriptColor StrangeSeedsCountOdd { get; set; } = new() { V4 = new(0, 1, 0, 2) };
+        [UserSetting("P2冰花着色 => 类型: 偶数轮次")]
+        public ScriptColor StrangeSeedsCountEven { get; set; } = new() { V4 = new(1, 0, 0, 2) };
+
+        public void Init(ScriptAccessory accessory)
+        {
+            // LatestStoneringerId = 0;
+            WildwindsMobs.Clear();
+            ExplosionCount = 0;
+            StrangeSeedsCount = 0;
+            IsAbominableBlinkCasting = false;
+            IsLashingLariatCasting = false;
+            LashingLariatCastingCount = 0;
+            accessory.Log.Debug($"M7S Script Init");
+        }
+        
+        [ScriptMethod(name: "Stoneringer Id获取 Stoneringer Action Id", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.StoneringerActionId], userControl: false)]
+        public void StoneringerActionId(Event @event, ScriptAccessory accessory)
+        {
+            // uint actionId = @event.ActionId;
+            // LatestStoneringerId = actionId;
+            // accessory.Log.Debug($"StoneringerActionId : update LatestStoneringerId => {LatestStoneringerId}");
+        }
+
+        [ScriptMethod(name: "SmashHere/There 危险区绘制 Smash Here/There Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.SmashHereThereActionId])]
+        public void SmashHereThereDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            long destoryAt = (long) @event.DurationMilliseconds() + 900;
+            uint actionId = @event.ActionId;
+            ulong bossId = @event.SourceId;
+            float radius_Smash = 6.0f;
+            (long, long) delay_destoryAt = new (0, destoryAt);
+
+            /* 
+            打近打远
+            思路1 仅标记死刑范围
+            思路2 标记死刑范围，同时非坦克职业标记应该靠近还是远离BOSS Circle + 箭头
+            */
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Name = nameof(SmashHereThereDangerousZoneDraw) + Guid.NewGuid().ToString();
+            dp.Scale = new Vector2(radius_Smash, radius_Smash);
+            dp.Delay = 0;
+            dp.DestoryAt = destoryAt + 1550;
+            dp.Owner = bossId;
+            dp.CentreResolvePattern = actionId == (uint)DataM7S.AID.SmashHere ? PositionResolvePatternEnum.PlayerNearestOrder : PositionResolvePatternEnum.PlayerFarestOrder;
+            dp.Color = accessory.Data.DefaultDangerColor.WithW(0.5f);
+            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Circle, dp);
+
+            //非坦克职能标记安全方向, 坦克职能标记危险方向
+            bool IsMeTank = accessory.Data.MyObject.IsTank();
+            DrawPropertiesEdit dpArrow = accessory.Data.GetDefaultDrawProperties();
+            dpArrow.Name = nameof(SmashHereThereDangerousZoneDraw) +"Arrow"+ Guid.NewGuid().ToString();
+            dpArrow.Delay = dp.Delay;
+            dpArrow.DestoryAt = dp.DestoryAt;
+            dpArrow.Scale = new Vector2(1, 3);
+            dpArrow.Owner = accessory.Data.Me;
+            dpArrow.TargetObject = bossId;
+            dpArrow.Color = IsMeTank ? accessory.Data.DefaultDangerColor.WithW(0.5f) :accessory.Data.DefaultSafeColor.WithW(0.5f);
+            dpArrow.Rotation = (IsMeTank ? MathF.PI : 0) + (actionId ==(uint)DataM7S.AID.SmashHere ? MathF.PI : 0);
+            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Arrow, dpArrow);
+        }
+
+        [ScriptMethod(name: "BrutishSwing 死刑时危险区绘制 Brutish Swing With Smash Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.BrutishSwingActionId_P1])]
+        public void BrutishSwingWithSmashDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            uint actionId = @event.ActionId;
+            ulong bossId = @event.SourceId;
+            long destoryAt = (long) @event.DurationMilliseconds();
+            (long, long) delay_destoryAt = new (0, destoryAt);
+            float radius_Stick = 12.0f;
+            float radius_Machete = 9.0f;
+            switch(actionId)
+            {
+                case (uint)DataM7S.AID.BrutishSwingStick_P1:
+                    accessory.FastDraw(DrawTypeEnum.Circle, bossId, new Vector2(radius_Stick, radius_Stick), delay_destoryAt, false);
+                    break;
+                case (uint)DataM7S.AID.BrutishSwingMachete_P1:
+                    accessory.FastDraw(DrawTypeEnum.Donut, bossId, new Vector2(radius_Machete * 4, radius_Machete), delay_destoryAt, false);
+                    break;
+            }
+
+        }
+
+        [ScriptMethod(name: "Pollen 危险区绘制 Pollen Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.PollenActionId])]
+        public void PollenDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            Vector3 pos = @event.EffectPosition;
+            long destoryAt = (long) @event.DurationMilliseconds();
+            (long , long) delay_destoryAt = new (0, destoryAt);
+            float radius_AOE = 8.0f;
+            accessory.FastDraw(DrawTypeEnum.Circle, pos, new Vector2(radius_AOE,radius_AOE), delay_destoryAt, false);
+            
+            // 记录安全区类型
+        }      
+
+        [ScriptMethod(name: "RootsOfEvil 危险区绘制 Roots Of Evil Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.RootsOfEvilActionId])]
+        public void RootsOfEvilDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            Vector3 pos = @event.EffectPosition;
+            long destoryAt = (long) @event.DurationMilliseconds();
+            (long , long) delay_destoryAt = new (0, destoryAt);
+            float radius_AOE = 12.0f;
+            accessory.FastDraw(DrawTypeEnum.Circle, pos, new Vector2(radius_AOE,radius_AOE), delay_destoryAt, false);
+        }
+
+        [ScriptMethod(name: "SinisterSeedsBlossom 危险区绘制 Sinister Seeds Blossom Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.SinisterSeedsBlossomActionId])]
+        public void SinisterSeedsBlossomDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            // 目标脚下放置米字型冰花 , P3 屏蔽，会影响看地板花纹
+            // 冰花的落点判定似乎要比前置技能的读条结束时间要晚一点
+            ulong tarId = @event.TargetId;
+            if (tarId != accessory.Data.Me || LashingLariatCastingCount > 0)
+            {
+                return;    
+            }
+            long destoryAt = (long) @event.DurationMilliseconds();
+            float radius_AOE = 4f;
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Scale = new Vector2(radius_AOE,20.0f);
+            dp.Owner = tarId;
+            dp.Delay = 0;
+            dp.DestoryAt = destoryAt;
+            dp.FixRotation = true;
+            dp.Color = accessory.Data.DefaultDangerColor.WithW(0.1f);
+            for (int i = 0; i < 4; i++)
+            {
+                dp.Name = $"{nameof(SinisterSeedsBlossomDangerousZoneDraw)}{i}" + Guid.NewGuid().ToString();
+                dp.Rotation = MathF.PI * 0.25f * i;
+                accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Straight, dp);
+            }
+        }
+
+        [ScriptMethod(name: "TendrilsOfTerror 危险区绘制 Tendrils Of Terror Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.TendrilsOfTerrorActionId])]
+        public void TendrilsOfTerrorDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            // 目标放置米字型冰花
+            Vector3 pos = @event.EffectPosition;
+            long destoryAt = (long) @event.DurationMilliseconds();
+            float radius_AOE = 4f;
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Scale = new Vector2(radius_AOE,100.0f);
+            dp.Position = pos;
+            dp.Delay = 0;
+            dp.DestoryAt = destoryAt;
+            dp.FixRotation = true;
+            dp.Color = accessory.Data.DefaultDangerColor.WithW(0.8f);
+            for (int i = 0; i < 4; i++)
+            {
+                dp.Name = $"{nameof(SinisterSeedsBlossomDangerousZoneDraw)}{i}" + Guid.NewGuid().ToString();
+                dp.Rotation = MathF.PI * 0.25f * i;
+                accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Straight, dp);
+            }
+        }
+
+        /*
+            为读条月环的小怪标记攻击7和攻击8?
+            为坦克选中最近的读条月环的小怪
+            为远敏选中最近的读条月环的小怪?
+        */
+        [ScriptMethod(name: "MobsWinds 标记功能 Mobs Winds Casting Mark", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.MobsWindsActionId])]
+        public void MobsWindsCastingMark(Event @event, ScriptAccessory accessory)
+        {
+            uint actionId = @event.ActionId;
+            ulong mobId = @event.SourceId;
+            if(actionId == (uint)DataM7S.AID.WindingWildwinds)
+            {
+                bool isGetTwoMobs = false;
+                IGameObject mobObj = accessory.Data.Objects.SearchById(mobId);
+                if(mobObj is not null)
+                {
+                    lock(_lock)
+                    {
+                        WildwindsMobs.Add(mobObj);
+                        isGetTwoMobs = WildwindsMobs.Count == 2;
+                    }
+                }
+                if(isGetTwoMobs)
+                {
+                    // 把靠近左侧的小怪排到前边
+                    List<IGameObject> mobs = WildwindsMobs.OrderBy(obj => obj.Position.X).ToList();
+                    for (int i = 0; i < mobs.Count; i++)
+                    {
+                        IGameObject _obj = mobs[i];
+                        KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
+                        if( i == 0)
+                        {
+                            markType = KodakkuAssist.Module.GameOperate.MarkType.Attack7;
+                        }
+                        else
+                        {
+                            markType = KodakkuAssist.Module.GameOperate.MarkType.Attack8; 
+                        }
+                        bool isLocal = true;
+                        accessory.Method.Mark((uint)_obj.EntityId, markType, isLocal);
+                    }
+
+                    // 是否为坦克玩家自动选中最近的月环小怪?
+                    bool SelectNearestForTank = true;
+                    if(SelectNearestForTank && accessory.Data.MyObject is not null && accessory.Data.MyObject.IsTank())
+                    {
+                        mobs = WildwindsMobs.OrderBy(obj => Util.DistanceBetweenTwoPoints(accessory.Data.MyObject.Position, obj.Position)).ToList();
+                        if(mobs.Count > 0)
+                        {
+                            accessory.Method.SelectTarget((uint)mobs[0].EntityId);
+                        } 
+                    }
+                    // 是否为远敏玩家自动选中最近的月环小怪?
+
+                }
+                
+            }
+
+        }
+
+
+        [ScriptMethod(name: "QuarrySwamp 安全区绘制 Quarry Swamp Safe Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.QuarrySwampActionId])]
+        public void QuarrySwampSafeZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+            石化眼的安全区由四个甜甜圈扇形构成
+            InnerScale = BOSS到小怪尸体的距离;
+            Scale = 50;
+            Radian = Atan2(小怪HitBox半径,BOSS到小怪尸体的距离) * 2
+            */
+            Vector3 bossPos = @event.SourcePosition;
+            ulong bossId = @event.SourceId;
+            long destoryAt = (long) @event.DurationMilliseconds();
+
+            // 小怪的实体信息收集
+            IEnumerable<IGameObject> mobs = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BloomingAbomination);
+            foreach (IGameObject mob in mobs)
+            {
+                float _dis = Util.DistanceBetweenTwoPoints(bossPos, mob.Position);
+                DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+                dp.Name = $"{nameof(QuarrySwampSafeZoneDraw)}{mob.EntityId}" + Guid.NewGuid().ToString();
+                dp.Delay = 0;
+                dp.DestoryAt = destoryAt;
+                dp.Scale = new Vector2(50.0f,50.0f);
+                dp.InnerScale = new Vector2(_dis, _dis);
+                dp.Owner = bossId;
+                dp.TargetObject = mob.EntityId;
+                dp.Radian = 2 * MathF.Atan2(mob.HitboxRadius, _dis);
+                dp.Color = accessory.Data.DefaultSafeColor;
+                accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Donut, dp);
+            }
+        }
+
+
+        [ScriptMethod(name: "Explosion 危险区绘制 Explosion Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.ExplosionActionId])]
+        public void ExplosionDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                x 三连衰减，第一次的中心位置标记较大的危险区，第三次的中心位置标记较小的安全区
+                三连衰减，根据先后顺序, 第一个着色较深, 第三个着色较浅
+            */
+            uint count = 0;
+            lock(_lock)
+            {
+                count = ++ExplosionCount;
+            }
+            Vector3 pos = @event.EffectPosition;
+            (long, long) delay_destoryAtFirst = new (0,(long)@event.DurationMilliseconds());
+            float radius_AOE = 25.0f;
+            accessory.FastDraw(DrawTypeEnum.Circle, pos, new Vector2(radius_AOE, radius_AOE), delay_destoryAtFirst, 
+                accessory.Data.DefaultDangerColor.WithW(1.0f / count));
+        }
+
+
+        [ScriptMethod(name: "ItCameFromTheDirt 危险区绘制 It Came From The Dirt Dangerous Zone Draw", eventType: EventTypeEnum.ActionEffect, eventCondition: [DataM7S.PulpSmashActionId])]
+        public void ItCameFromTheDirtDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                为分摊绘制脚下小钢铁
+                为分摊后的分散绘制八分的扇形
+                记录分摊跳跃前的面向
+                记录分摊跳跃后的面向
+            */
+
+            // 画脚下小钢铁
+            ulong bossId = @event.SourceId;
+            float radius_centreDanger = 6.0f;
+            (long Delay, long DestoryAt) delay_destoryAtCentreDanger = new (1800, 2300);
+            accessory.FastDraw(DrawTypeEnum.Circle, bossId, new Vector2(radius_centreDanger, radius_centreDanger), delay_destoryAtCentreDanger, false);
+
+            // 画八方扇形
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            // dp.Name
+            dp.Delay = delay_destoryAtCentreDanger.Delay;
+            dp.DestoryAt = delay_destoryAtCentreDanger.DestoryAt;
+            dp.Scale = new Vector2(30.0f,30.0f);
+            dp.InnerScale = new Vector2(radius_centreDanger, radius_centreDanger);
+            dp.Owner = bossId;
+            // dp.TargetObject = mob.EntityId;
+            dp.Radian = (3.0f / 18.0f) * MathF.PI;
+            dp.Color = accessory.Data.DefaultDangerColor;
+            
+
+            foreach (uint playerId in accessory.Data.PartyList)
+            {
+                dp.Name = nameof(ItCameFromTheDirtDangerousZoneDraw) + playerId.ToString() + Guid.NewGuid().ToString();
+                dp.TargetObject = playerId;
+                // 过滤一下死掉的哥们
+                IGameObject obj = accessory.Data.Objects.SearchById((ulong)playerId);
+                if(obj is null || obj.IsDead)
+                {
+                    continue;
+                }
+                accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Donut, dp);
+            }
+            
+        }
+
+        [ScriptMethod(name: "NeoBombarianSpecial 安全区绘制 Neo Bombarian Special Safe Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.NeoBombarianSpecialActionId])]
+        public void NeoBombarianSpecialSafeZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                P1转场击退绘制安全区范围
+            */
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Name = nameof(NeoBombarianSpecialSafeZoneDraw) + Guid.NewGuid().ToString();
+            dp.Delay = 500; // 由于有时候BOSS会有个转向的动作, 添加一点延迟
+            dp.DestoryAt = (long) @event.DurationMilliseconds() - dp.Delay;
+            dp.Scale = new Vector2(50.0f,30.0f);
+            dp.Owner = @event.SourceId;
+            dp.Offset = new Vector3(0, 0, -13);
+            dp.Color = accessory.Data.DefaultSafeColor;
+            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dp);
+        }
+
+        [ScriptMethod(name: "AbominableBlink 读条检测 Abominable Blink Casting Check", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.AbominableBlinkActionId], userControl: false)]
+        public void AbominableBlinkCastingCheck(Event @event, ScriptAccessory accessory)
+        {
+            IsAbominableBlinkCasting = true;
+        }
+
+
+
+        [ScriptMethod(name: "BrutishSwing P2P3 危险区绘制 Brutish Swing P2P3 Dangerous Zone Draw", 
+            eventType: EventTypeEnum.StartCasting, 
+            eventCondition: [DataM7S.BrutishSwingActionId_P2P3])]
+        public void BrutishSwingP2P3DangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                拔武器+跳跃 在目标地点绘制危险区
+            */
+            uint actionId = @event.ActionId;
+            ulong bossId = @event.SourceId;
+            Vector3 tarPos = @event.EffectPosition;
+            long destoryAt = (long) @event.DurationMilliseconds();
+            (long, long) delay_destoryAt = new (0, destoryAt);
+            float radius_Stick = 25.0f;
+            float radius_Machete = 22.0f;
+            if(LashingLariatCastingCount > 1)
+            {
+                // P3第二组的双武器跳跃，要放置冰花, 绘图稍微延后
+                // 月环延后, 钢铁不延
+                if(actionId == (uint)DataM7S.AID.BrutishSwingMachete_P3)
+                {
+                    delay_destoryAt = new (1160, destoryAt - 1160);
+                }
+            }
+            else if(StrangeSeedsCount > 0)
+            {
+                // 连冰花后的武器跳跃也需要延后，月环延后, 钢铁不延
+                // ↑我去,GA-100后的三穿一的月环也得延后，否则会看不清场地上的安全区
+                if(actionId == (uint)DataM7S.AID.BrutishSwingMachete_P2)
+                {
+                    delay_destoryAt = new (2460, destoryAt - 2460);
+                }
+            }
+            else if(IsAbominableBlinkCasting)
+            {
+                IsAbominableBlinkCasting = false;
+                if(actionId == (uint)DataM7S.AID.BrutishSwingMachete_P2)
+                {
+                    delay_destoryAt = new (2460, destoryAt - 2460);
+                }
+            }
+            switch(actionId)
+            {
+                case (uint)DataM7S.AID.BrutishSwingStick_P2:
+                case (uint)DataM7S.AID.BrutishSwingStick_P3:
+                    accessory.FastDraw(DrawTypeEnum.Circle, tarPos, new Vector2(radius_Stick, radius_Stick), delay_destoryAt, false);
+                    break;
+                case (uint)DataM7S.AID.BrutishSwingMachete_P2:
+                case (uint)DataM7S.AID.BrutishSwingMachete_P3:
+                    accessory.FastDraw(DrawTypeEnum.Donut, tarPos, new Vector2(radius_Machete * 4, radius_Machete), delay_destoryAt, false);
+                    break;
+            }
+
+            /*
+                为P3的第二次武器跳跃, 也就是冲锋后的武器跳跃，绘制嘴炮危险区
+            */
+            if(LashingLariatCastingCount == 1 && IsLashingLariatCasting)
+            {
+                IsLashingLariatCasting = false;
+                LashingLariatCastingCount ++ ; // 当作标识符号, 第二组的双武器跳跃绘图需要延后
+                (long, long) delay_destoryAtGlower = new (destoryAt, 3100);
+                // (long, long) delay_destoryAtRect = new (0, destoryAt - 1300);
+                float radius_AOE = 6.0f;
+                accessory.FastDraw(DrawTypeEnum.Rect, @event.SourceId, new Vector2(14.0f, 65.0f), delay_destoryAtGlower,false);
+                foreach (uint playerId in accessory.Data.PartyList)
+                {
+                    ulong _id = (ulong)playerId;
+                    // 过滤一下死掉的哥们
+                    IGameObject obj = accessory.Data.Objects.SearchById(_id);
+                    if(obj is null || obj.IsDead)
+                    {
+                        continue;
+                    }
+                    accessory.FastDraw(DrawTypeEnum.Circle, _id, new Vector2(radius_AOE, radius_AOE), delay_destoryAtGlower, false);
+                }
+            }
+
+
+        }
+
+
+        [ScriptMethod(name: "GlowerPower 危险区绘制 Glower Power Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.GlowerPowerActionId])]
+        public void GlowerPowerDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                嘴炮 绘制直线+跟随人物的分散
+            */
+            long destoryAt = @event.DurationMilliseconds();
+            (long, long) delay_destoryAt = new (0, destoryAt);
+            // (long, long) delay_destoryAtRect = new (0, destoryAt - 1300);
+            float radius_AOE = 6.0f;
+            
+            accessory.FastDraw(DrawTypeEnum.Rect, @event.SourceId, new Vector2(14.0f, 65.0f), delay_destoryAt,false);
+            foreach (uint playerId in accessory.Data.PartyList)
+            {
+                ulong _id = (ulong)playerId;
+                // 过滤一下死掉的哥们
+                IGameObject obj = accessory.Data.Objects.SearchById(_id);
+                if(obj is null || obj.IsDead)
+                {
+                    continue;
+                }
+                accessory.FastDraw(DrawTypeEnum.Circle, _id, new Vector2(radius_AOE, radius_AOE), delay_destoryAt, false);
+            }
+            
+        }
+        
+        [ScriptMethod(name: "StrangeSeeds 轮次着色 Strange Seeds Counts Draw", 
+            eventType: EventTypeEnum.StartCasting, 
+            eventCondition: [DataM7S.StrangeSeedsActionId])]
+            // suppress : 1000)]
+        public void StrangeSeedsCountsDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                冰花点名时，通过着色提示奇数次还是偶数次
+                由于有可能点名自己的那个被 suppress ,不使用该特性
+            */
+            uint count = 0;
+            lock(_lock)
+            {
+                count = StrangeSeedsCount ++;
+            }
+            ulong tarId = @event.TargetId;
+            if(tarId != accessory.Data.Me || LashingLariatCastingCount > 0)
+            {
+                return;
+            }
+            (long, long) delay_destoryAt = new (0, (long)@event.DurationMilliseconds());
+            bool isOdd = count % 4 == 0 || count % 4 == 1;
+            Vector4 color = isOdd ? StrangeSeedsCountOdd.V4 : StrangeSeedsCountEven.V4;
+            accessory.FastDraw(DrawTypeEnum.Circle, tarId, new Vector2(2.0f, 2.0f), delay_destoryAt, color);
+            accessory.Log.Debug($"Strange Seeds Counts Draw : count => {count / 2 + 1}");
+        }
+
+        /*
+            GA-100 绘制危险区? 
+        */
+
+        /*
+            嘴炮+分散，是否要提前绘制？
+            ↑原生读条是1.7s太快了,想办法提前绘制
+        */
+        [ScriptMethod(name: "LashingLariat 读条了吗? IsLashingLariatCasting Check", 
+            eventType: EventTypeEnum.StartCasting, 
+            eventCondition: [DataM7S.LashingLariatActionId], userControl: false)]
+        public void IsLashingLariatCastingCheck(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                P3冲锋读条，由于P3冲锋后接的二武器跳跃后的嘴炮读条很快，用此标记提前嘴炮的绘制
+                ↑ 我去，第二组的第二轮武器跳跃还没有嘴炮，加个标识
+            */
+            IsLashingLariatCasting = true;
+            LashingLariatCastingCount ++ ;
+        }
+
+
+        [ScriptMethod(name: "LashingLariat 危险区绘制 Lashing Lariat Dangerous Zone Draw", 
+            eventType: EventTypeEnum.StartCasting, 
+            eventCondition: [DataM7S.LashingLariatActionId])]
+        public void LashingLariatDangerousZoneDraw(Event @event, ScriptAccessory accessory)
+        {
+            /*
+                P3 冲锋，绘制危险区
+            */
+
+            uint actionId = @event.ActionId;
+            ulong bossId = @event.SourceId;
+            Vector3 tarPos = @event.EffectPosition;
+            long destoryAt = (long) @event.DurationMilliseconds();
+            (long, long) delay_destoryAt = new (0, destoryAt);
+            Vector2 scale = new (32.0f, 70.0f);
+            // accessory.FastDraw(DrawTypeEnum.Rect, bossId, scale, delay_destoryAt, false);
+            float offsetX = actionId == (uint)DataM7S.AID.LashingLariatWithLeftHand ? -9 : 9;
+
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Name = nameof(LashingLariatDangerousZoneDraw) + Guid.NewGuid().ToString();
+            dp.Delay = 0;
+            dp.DestoryAt = (long) @event.DurationMilliseconds();
+            dp.Scale = new Vector2(32.0f,70.0f);
+            dp.Owner = @event.SourceId;
+            dp.Offset = new Vector3(offsetX, 0, 0);
+            dp.Color = accessory.Data.DefaultDangerColor;
+            accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dp);
+            
+        }
+
+        /*
+            P2P3, 为被线连着的玩家画一条分界线, 1层2层
+        */
+
+
+
+        /*
+            P3孢子爆炸绘制危险区
+            ↑同P1, 不进行额外绘制
+        */
+
+        /*
+            P3分摊冰花绘制危险区
+            P3分摊冰花落地后绘制危险区
+            ↑同P2,不进行额外绘制
+        */
+        /*
+            石化绘制安全区
+            ↑同P1, 不进行额外绘制
+        */
+        /*
+            潜地炮+冰花绘制危险区
+            ↑同P1, 不进行额外绘制
+        */
+
+
+
+    }
+
+
+    #region 拓展方法
+    public static class ScriptExtensions_Tsing
+    {
+
+        // 快速绘图
+        public static void FastDraw(this ScriptAccessory accessory,DrawTypeEnum drawType,Vector3 position,Vector2 scale, (long Delay, long DestoryAt) delay_destoryAt, Vector4 color){
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Name = Guid.NewGuid().ToString();
+            dp.Delay = delay_destoryAt.Delay;
+            dp.DestoryAt = delay_destoryAt.DestoryAt;
+            dp.Color = color;
+            dp.Scale = scale;
+            switch(drawType)
+            {
+                case DrawTypeEnum.Donut:
+                    dp.Scale = new (scale.X);
+                    dp.InnerScale = new (scale.Y);
+                    dp.Radian = 2 * MathF.PI;
+                    break;
+            }
+
+            dp.Position = position;
+            accessory.Method.SendDraw(DrawModeEnum.Default, drawType, dp);
+        }
+        public static void FastDraw(this ScriptAccessory accessory,DrawTypeEnum drawType,ulong ownerId,Vector2 scale, (long Delay, long DestoryAt) delay_destoryAt, Vector4 color){
+            DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
+            dp.Name = Guid.NewGuid().ToString();
+            dp.Delay = delay_destoryAt.Delay;
+            dp.DestoryAt = delay_destoryAt.DestoryAt;
+            dp.Color = color;
+            dp.Scale = scale;
+            switch(drawType)
+            {
+                case DrawTypeEnum.Donut:
+                    dp.Scale = new (scale.X);
+                    dp.InnerScale = new (scale.Y);
+                    dp.Radian = 2 * MathF.PI;
+                    break;
+            }
+
+            dp.Owner = ownerId;
+            accessory.Method.SendDraw(DrawModeEnum.Default, drawType, dp);
+        }
+        public static void FastDraw(this ScriptAccessory accessory,DrawTypeEnum drawType,Vector3 position,Vector2 scale, (long Delay, long DestoryAt) delay_destoryAt, bool isSafe){
+            Vector4 color = isSafe ? accessory.Data.DefaultSafeColor : accessory.Data.DefaultDangerColor;
+            accessory.FastDraw(drawType, position, scale, delay_destoryAt, color);
+        }
+        public static void FastDraw(this ScriptAccessory accessory,DrawTypeEnum drawType,ulong ownerId,Vector2 scale, (long Delay, long DestoryAt) delay_destoryAt, bool isSafe){
+            Vector4 color = isSafe ? accessory.Data.DefaultSafeColor : accessory.Data.DefaultDangerColor;
+            accessory.FastDraw(drawType, ownerId, scale, delay_destoryAt, color);
+        }
+
+        public static uint DurationMilliseconds(this Event @event)
+        {
+            string _dm = @event["DurationMilliseconds"];
+            _dm = _dm.Length < 10 ? _dm : "404404404";
+            return JsonConvert.DeserializeObject<uint>(_dm);
+        }
+    }
+    public static class Utilities_Tsing
+    {
+        public static float DistanceBetweenTwoPoints(Vector3 point1,Vector3 point2)
+        {
+            float x = point1.X - point2.X;
+            float y = point1.Y - point2.Y;
+            float z = point1.Z - point2.Z;
+            return MathF.Sqrt(MathF.Pow(x, 2) + MathF.Pow(y, 2) + MathF.Pow(z, 2));
+        }
+    }
+    #endregion
+
+    #region 数据存放
+    public static class DataM7S
+    {
+        public const string SmashHereThereActionId = $"ActionId:regex:^(42335|42336)$";
+        public const string BrutishSwingActionId_P1 = $"ActionId:regex:^(42337|42338)$";
+        public const string StoneringerActionId = $"ActionId:regex:^(42333|42334)$";
+        public const string PollenActionId = $"ActionId:regex:^(42347)$";
+        public const string RootsOfEvilActionId = $"ActionId:regex:^(42354)$";
+        public const string SinisterSeedsBlossomActionId = $"ActionId:regex:^(42350|42392|42395)$";
+        public const string TendrilsOfTerrorActionId = $"ActionId:regex:^(42351|42393|42396)$";
+        public const string QuarrySwampActionId = $"ActionId:regex:^(42357)$";
+        public const string MobsWindsActionId = $"ActionId:regex:^(43277|43278)$";
+        public const string ExplosionActionId = $"ActionId:regex:^(42358)$";
+        public const string PulpSmashActionId = $"ActionId:regex:^(42359)$";
+        public const string ItCameFromTheDirtActionId = $"ActionId:regex:^(42362)$";
+        public const string NeoBombarianSpecialActionId = $"ActionId:regex:^(42364)$";
+        public const string BrutishSwingActionId_P2P3 = $"ActionId:regex:^(42386|42387|42403|42405)$";
+        public const string GlowerPowerActionId = $"ActionId:regex:^(43340)$";
+        public const string AbominableBlinkActionId = $"ActionId:regex:^(42377)$";
+        public const string StrangeSeedsActionId = $"ActionId:regex:^(42392)$";
+        public const string LashingLariatActionId = $"ActionId:regex:^(42408|42410)$";
+        // public const string BrutishSwingActionId_P3 = $"ActionId:regex:^(42403|42405)$";
+
+        
+        public enum AID : uint
+        {
+            StoneringerStick = 42333, // 掏出大棒
+            StoneringerMachete = 42334, // 掏出大刀
+            SmashHere = 42335, // 打近死刑, cast 2.7s circle 7y
+            SmashThere = 42336, // 打远死刑, cast 2.7s circle 7y
+            BrutishSwingStick_P1 = 42337, // P1大棒的钢铁AOE
+            BrutishSwingMachete_P1 = 42338, // P2大刀的月环AOE
+            Pollen = 42347, // P1中BOSS在地上放置孢子,cast 3.7s, circle 8y
+            RootsOfEvil = 42354, // P1中潜地炮变大后的AOE, cast 2.7s , circle 12y
+            SinisterSeedsBlossom = 42350, // 冰花点名, cast 6.7s, 4条直线 ,4y
+            SinisterSeedsCircle = 42353, // 潜地炮点名, cast 2.7s, 8y
+            TendrilsOfTerror_P1 = 42351, // 冰花落地后蔓延开的AOE, 4条直线 ,4y
+
+            WindingWildwinds = 43277, // 小怪读条,月环 cast 6.7s
+            CrossingCrosswinds = 43278, // 小怪读条,十字 cast 6.7s
+            QuarrySwamp = 42357, // BOSS 石化读条, cast 3.7s
+            Explosion = 42358, // 三连衰减AOE, cast 8.7s
+            PulpSmash = 42359, // 跳跃分摊, cast 2.7s
+            ItCameFromTheDirt = 42362, // 跳跃分摊后的脚下钢铁+八方扇形 cast 1.7s
+            NeoBombarianSpecial = 42364, // P1末尾转场AOE
+            BrutishSwingJump_P2 = 42381, // P2跳跃到别的墙面 cast 3.7s
+            BrutishSwingStick_P2 = 42386, //P2 大棒钢铁AOE
+            BrutishSwingMachete_P2 = 42387, // P2 月环AOE
+            GlowerPower_Straight_P2 = 42373, // BOSS本体嘴炮, cast 2.4s
+            AbominableBlink = 42377, // GA-100 ,cast 5.0s
+            GlowerPower_Electrogenetic_P2 = 43340, // 分身读条的分散AOE cast 3.7s
+            StrangeSeeds = 42392, // P2的点名冰花, cast 4.7s
+            TendrilsOfTerror_P2_StrangeSeeds = 42393, // P2 点名冰花落地后的主体读条,搭配两个42394形成米字型 cast 2.7s
+            KillerSeeds = 42395, // P2P3的分摊冰花, cast 4.7s,
+            TendrilsOfTerror_P2_KillerSeeds = 42396 , // 搭配两个42397形成米字型 cast 2.7s
+
+            BrutishSwingJump_P3 = 42402, // P3跳跃到别的墙面cast 2.7s
+
+            /* 
+                很有可能先大棒和后大棒, 用的是两个不同的ID, P3的嘴炮+分散读条较快
+                ↑非也，就是同一个
+            */
+            BrutishSwingStick_P3 = 42403, //P3 大棒钢铁AOE cast 6.4s 后置的大棒
+            BrutishSwingMachete_P3 = 42405, // P3 大刀月环AOE cast 6.4s 前置的大刀
+            LashingLariat_Unknown = 42407, // 冲锋时BOSS的读条 cast 3.2s
+            LashingLariatWithRightHand = 42408, //冲锋，使用右手, 面向BOSS去右侧, cast 3.7s
+            LashingLariatWithLeftHand = 42410, //冲锋，使用左手, 面向BOSS去左侧, cast 3.7s
+            GlowerPower_Straight_P3 = 43338, // BOSS本体嘴炮, cast 0.4s
+            GlowerPower_Electrogenetic_P3 = 43358, // 分身读条的分散AOE cast 1.7s
+
+        }
+
+
+
+        public enum OID : uint
+        {
+            BruteAbombinator = 18307, // BOSS
+            BloomingAbomination = 18308, // 小怪
+        }
+    }
+    #endregion
+}
