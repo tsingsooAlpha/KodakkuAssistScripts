@@ -14,5 +14,13 @@
         "Author": "Mao",
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland_API12.cs",
         "UpdateInfo": "尚未更新内容，仅完成API12的匹配更新"
+    },
+    {
+        "Name": "[国际服]M7S",
+        "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2631f",
+        "Version": "0.0.0.1",
+        "Author": "Mao",
+        "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/refs/heads/main/07-Dawntrail/M7S.cs",
+        "UpdateInfo": "请君测试"
     }
 ]
