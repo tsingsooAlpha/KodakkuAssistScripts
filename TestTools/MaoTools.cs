@@ -25,7 +25,7 @@ using EX = TsingNamespace.TsingTest.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.TsingTest
 {
-    [ScriptType(name: "测试工具", guid: "e3cfc380-edc2-f441-2424-e9e294f2632e", version: "0.0.0.4", author: "Mao",note: noteStr)]
+    [ScriptType(name: "Mao的小工具", guid: "e3cfc380-edc2-f441-2424-e9e294f2632e", version: "0.0.0.4", author: "Mao",note: noteStr)]
     public class TsingTestScript
     {
         const string noteStr =
