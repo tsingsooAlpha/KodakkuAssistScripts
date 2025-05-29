@@ -2,9 +2,9 @@
     {
         "Name": "Mao提供的小工具",
         "Guid": "e3cfc380-edc2-f441-2424-e9e294f2632e",
-        "Version": "0.0.0.3",
+        "Version": "0.0.0.4",
         "Author": "Mao",
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/TestTools/TsingTest.cs",
-        "UpdateInfo": ""
+        "UpdateInfo": "适配了0.4.4的Kod"
     }
 ]
