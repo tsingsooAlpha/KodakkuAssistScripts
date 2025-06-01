@@ -7,4 +7,12 @@
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/TestTools/MaoTools.cs",
         "UpdateInfo": "适配了0.4.4的Kod"
     }
+    {
+        "Name": "[7.2]Mao提供的小工具",
+        "Guid": "e3cfc380-edc2-f441-2424-e9e294f2632f",
+        "Version": "0.0.0.4",
+        "Author": "Mao",
+        "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/TestTools/MaoTools_NA.cs",
+        "UpdateInfo": "适配了0.4.4的Kod, 国际服版本"
+    }
 ]
