@@ -20,6 +20,7 @@
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2631f",
         "Version": "0.0.0.3",
         "Author": "Mao",
+        "TerritoryIds": [1261],
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/07-Dawntrail/M7S.cs",
         "UpdateInfo": "如果指路出现错误内容，将会在未来一周内逐步修复"
     }
