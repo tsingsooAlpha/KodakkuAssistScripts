@@ -18,10 +18,10 @@
     {
         "Name": "M7S·阿卡狄亚零式·中量级3",
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2631f",
-        "Version": "0.0.0.4",
+        "Version": "0.0.0.5",
         "Author": "Mao",
         "TerritoryIds": [1261],
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/07-Dawntrail/M7S.cs",
-        "UpdateInfo": "1. 修复了勾选自动打断后不打断小怪的问题。2.添加了P2P3黄圈点名冰花的预站位提示"
+        "UpdateInfo": "1. 修复了勾选自动打断后不打断小怪的问题。2.添加了P2P3黄圈点名冰花的预站位提示。3.提前了(荆棘挥打)分摊八方的指路绘制时间点。"
     }
 ]
