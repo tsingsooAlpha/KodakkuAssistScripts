@@ -1272,6 +1272,119 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             accessory.MultiDisDraw(new List<EX.DisplacementContainer> { new(myEndPos, 0, 4500) }, MultiDisProp);
         }
 
+        [ScriptMethod(name: "P2 点名冰花(两两冰花) 预站位 Strange Seeds Pre Guide Draw",
+            eventType: EventTypeEnum.StartCasting,
+            eventCondition: [DataM7S.StrangeSeedsVisualActionId_P2])]
+        public void P2_StrangeSeedsPreGuideDraw(Event @event, ScriptAccessory accessory)
+        {
+            bool isBossNearWall = @event.SourcePosition.Z < DataM7S.P2_FieldCenter.Z;
+            bool isFixedStrangeSeeds = P2StrangeSeedsFixed;
+            bool isHintFull = !P2StrangeSeedsSimpleStyle;
+            (long Delay, long DestoryAt) delay_destoryAt = new(0, 3500);
+            if (isFixedStrangeSeeds)
+            {
+                // BOSS靠近墙壁的情况
+                Vector3 fixedMT = new Vector3(9.7f, 0, -12.5f);
+                Vector3 fixedST = new Vector3(12, 0, -24.5f);
+                Vector3 fixedD1 = new Vector3(4.2f, 0, -10);
+                Vector3 fixedD2 = new Vector3(7.2f, 0, -2.8f);
+                Vector3 fixedH1 = new Vector3(0.9f, 0, 7.2f);
+                Vector3 fixedH2 = new Vector3(-1.3f, 0, 13.8f);
+                Vector3 fixedD3 = new Vector3(-4.8f, 0, -19.7f);
+                Vector3 fixedD4 = new Vector3(-9.2f, 0, 9.7f);
+
+                if (!isBossNearWall)
+                {
+                    // BOSS远离墙壁的情况
+                    fixedMT = new Vector3(-fixedMT.X, 0, -fixedMT.Z);
+                    fixedST = new Vector3(-fixedST.X, 0, -fixedST.Z);
+                    fixedD1 = new Vector3(-fixedD1.X, 0, -fixedD1.Z);
+                    fixedD2 = new Vector3(-fixedD2.X, 0, -fixedD2.Z);
+                    fixedH1 = new Vector3(-fixedH1.X, 0, -fixedH1.Z);
+                    fixedH2 = new Vector3(-fixedH2.X, 0, -fixedH2.Z);
+                    fixedD3 = new Vector3(4.6f, 0, fixedD3.Z);
+                    fixedD4 = new Vector3(-fixedD4.X, 0, -fixedD4.Z);
+                }
+                Vector2 _size = new Vector2(0.5f, 0.5f);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedMT + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedST + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedH1 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedH2 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD1 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD2 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD3 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD4 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+
+
+                return;
+            }
+            else
+            {
+                Vector3 oddForMeleeMMW = new Vector3(12, 0, -24.5f);
+                Vector3 evenForMeleeMMW = new Vector3(3.4f, 0, -21);
+                Vector3 oddForTHMMW = new Vector3(12, 0, 0);
+                Vector3 evenForTHMMW = new Vector3(3.4f, 0, -3.4f);
+                Vector3 oddForD4MMW = new Vector3(-12, 0, 0);
+                Vector3 evenForD4MMW = new Vector3(-7.2f, 0, 14);
+                Vector3 oddForD3MMW = new Vector3(-12, 0, -24.5f);
+                Vector3 evenForD3MMW = new Vector3(-3.4f, 0, -21);
+                Vector3 safePos1MMW = new Vector3(6.5f, 0, -12.5f);
+                Vector3 safePos2MMW = new Vector3(7.8f, 0, 10);
+                if (!isBossNearWall)
+                {
+                    // boss所在处没有相邻墙壁, 转180度
+                    oddForMeleeMMW = new Vector3(-oddForMeleeMMW.X, 0, -oddForMeleeMMW.Z);
+                    evenForMeleeMMW = new Vector3(-evenForMeleeMMW.X, 0, -evenForMeleeMMW.Z);
+                    oddForTHMMW = new Vector3(-oddForTHMMW.X, 0, -oddForTHMMW.Z);
+                    evenForTHMMW = new Vector3(-evenForTHMMW.X, 0, -evenForTHMMW.Z);
+                    oddForD4MMW = new Vector3(-oddForD4MMW.X, 0, -oddForD4MMW.Z);
+                    evenForD4MMW = new Vector3(-evenForD4MMW.X, 0, -evenForD4MMW.Z);
+                    safePos1MMW = new Vector3(-safePos1MMW.X, 0, -safePos1MMW.Z);
+                    safePos2MMW = new Vector3(-safePos2MMW.X, 0, -safePos2MMW.Z);
+                }
+                else
+                {
+                    // boss与短边相邻,D3的偶数轮次和近战共用一个点位
+                    evenForD3MMW = evenForMeleeMMW;
+                }
+
+                if (WalkthroughType == WalkthroughEnum.MMW_SPJP)
+                {
+
+                    Vector2 size = new Vector2(0.6f, 0.3f);
+                    delay_destoryAt.DestoryAt += 1000; // 多画一秒钟
+                    accessory.FastDraw(DrawTypeEnum.Circle, safePos1MMW + DataM7S.P2_FieldCenter, new Vector2(2.0f, 2.0f), delay_destoryAt, accessory.Data.DefaultSafeColor.WithW(0.25f), GuideDrawMode);
+                    accessory.FastDraw(DrawTypeEnum.Circle, safePos2MMW + DataM7S.P2_FieldCenter, new Vector2(2.0f, 2.0f), delay_destoryAt, accessory.Data.DefaultSafeColor.WithW(0.25f), GuideDrawMode);
+       
+                     // 只画自己的职能
+                    switch (accessory.GetMyRole())
+                    {
+                        case EX.PlayerRoleEnum.MT:
+                        case EX.PlayerRoleEnum.ST:
+                        case EX.PlayerRoleEnum.H1:
+                        case EX.PlayerRoleEnum.H2:
+                            accessory.FastDraw(DrawTypeEnum.Donut, oddForTHMMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountOdd.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            accessory.FastDraw(DrawTypeEnum.Donut, evenForTHMMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            break;
+                        case EX.PlayerRoleEnum.D1:
+                        case EX.PlayerRoleEnum.D2:
+                            accessory.FastDraw(DrawTypeEnum.Donut, oddForMeleeMMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountOdd.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            accessory.FastDraw(DrawTypeEnum.Donut, evenForMeleeMMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            break;
+                        case EX.PlayerRoleEnum.D3:
+                            // 如果是BOSS靠近短边, D3靠近场中的那个点，和近战公用
+                            accessory.FastDraw(DrawTypeEnum.Donut, oddForD3MMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountOdd.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            accessory.FastDraw(DrawTypeEnum.Donut, evenForD3MMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            break;
+                        case EX.PlayerRoleEnum.D4:
+                            accessory.FastDraw(DrawTypeEnum.Donut, oddForD4MMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountOdd.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            accessory.FastDraw(DrawTypeEnum.Donut, evenForD4MMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
+                            break;
+                    }
+                    
+                }
+            }
+        }
 
         [ScriptMethod(name: "P2 点名冰花(两两冰花) 轮次着色 Strange Seeds Counts Draw",
             eventType: EventTypeEnum.StartCasting,
@@ -1297,29 +1410,41 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
             bool isBossNearWall = @event.SourcePosition.Z < DataM7S.P2_FieldCenter.Z;
             bool isFixedStrangeSeeds = P2StrangeSeedsFixed;
+            bool isHintFull = !P2StrangeSeedsSimpleStyle;
             if (isFixedStrangeSeeds)
             {
-                // 如果是固定式，只需要画出参考点位即可
-                Vector3 endPos1 = new Vector3(12, 0, -24.5f);
-                Vector3 endPos2 = new Vector3(-12, 0, 24.5f);
+                // BOSS靠近墙壁的情况
+                Vector3 fixedMT = new Vector3(9.7f, 0, -12.5f);
+                Vector3 fixedST = new Vector3(12, 0, -24.5f);
+                Vector3 fixedD1 = new Vector3(4.2f, 0, -10);
+                Vector3 fixedD2 = new Vector3(7.2f, 0, -2.8f);
+                Vector3 fixedH1 = new Vector3(0.9f, 0, 7.2f);
+                Vector3 fixedH2 = new Vector3(-1.3f, 0, 13.8f);
+                Vector3 fixedD3 = new Vector3(-4.8f, 0, -19.7f);
+                Vector3 fixedD4 = new Vector3(-9.2f, 0, 9.7f);
+
                 if (!isBossNearWall)
                 {
-                    // boss所在处没有相邻墙壁, 转180度
-                    endPos1 = new Vector3(-endPos1.X, 0, -endPos1.Z);
-                    endPos2 = new Vector3(-endPos2.X, 0, -endPos2.Z);
+                    // BOSS远离墙壁的情况
+                    fixedMT = new Vector3(-fixedMT.X, 0, -fixedMT.Z);
+                    fixedST = new Vector3(-fixedST.X, 0, -fixedST.Z);
+                    fixedD1 = new Vector3(-fixedD1.X, 0, -fixedD1.Z);
+                    fixedD2 = new Vector3(-fixedD2.X, 0, -fixedD2.Z);
+                    fixedH1 = new Vector3(-fixedH1.X, 0, -fixedH1.Z);
+                    fixedH2 = new Vector3(-fixedH2.X, 0, -fixedH2.Z);
+                    fixedD3 = new Vector3(4.6f, 0, fixedD3.Z);
+                    fixedD4 = new Vector3(-fixedD4.X, 0, -fixedD4.Z);
                 }
-                for (int i = 0; i < 4; i++)
-                {
-                    float scale = 1.0f / 14 + i * 1.0f / 7;
-                    accessory.FastDraw(DrawTypeEnum.Circle,
-                        new Vector3(2 * scale * endPos1.X, endPos1.Y, 2 * scale * endPos1.Z) + DataM7S.P2_FieldCenter, new Vector2(0.5f, 0.5f),
-                        new() { Delay = delay_destoryAt.Delay, DestoryAt = delay_destoryAt.DestoryAt + 1000 },
-                        true, GuideDrawMode);
-                    accessory.FastDraw(DrawTypeEnum.Circle,
-                        new Vector3(-2 * scale * endPos1.X, endPos1.Y, -2 * scale * endPos1.Z) + DataM7S.P2_FieldCenter, new Vector2(0.5f, 0.5f),
-                        new() { Delay = delay_destoryAt.Delay, DestoryAt = delay_destoryAt.DestoryAt + 1000 },
-                        true, GuideDrawMode);
-                }
+                Vector2 _size = new Vector2(0.5f, 0.5f);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedMT + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedST + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedH1 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedH2 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD1 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD2 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD3 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+                accessory.FastDraw(DrawTypeEnum.Circle, fixedD4 + DataM7S.P2_FieldCenter, _size, delay_destoryAt, true, GuideDrawMode);
+
 
                 return;
             }
@@ -1377,9 +1502,6 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             }
 
             // 画一下奇偶指示点
-            bool isHintFull = !P2StrangeSeedsSimpleStyle;
-
-
             if (WalkthroughType == WalkthroughEnum.MMW_SPJP)
             {
                 // (long, long) delay_destoryAt = new(0, 5000);
@@ -1736,7 +1858,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             }
         }
 
-        [ScriptMethod(name: "P3 种弹炸裂(黄圈冰花/两轮冰花)预站位 指路绘制 Sinister Seeds Blossom (Yellow) Pre Guide Draw",
+        [ScriptMethod(name: "P3 种弹炸裂(黄圈冰花/两轮冰花) 预站位 指路绘制 Sinister Seeds Blossom (Yellow) Pre Guide Draw",
             eventType: EventTypeEnum.StartCasting,
             eventCondition: [DataM7S.StrangeSeedsVisualActionId_P3])]
         public void P3_SinisterSeedsBlossomGuideDraw2_Pre(Event @event, ScriptAccessory accessory)
@@ -2103,6 +2225,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         public const string StrangeSeedsActionId = $"ActionId:regex:^(42392)$";
         public const string LashingLariatActionId = $"ActionId:regex:^(42408|42410)$";
         public const string StrangeSeedsVisualActionId_P3 = $"ActionId:regex:^(43274)$";
+        public const string StrangeSeedsVisualActionId_P2 = $"ActionId:regex:^(42391)$";
         // public const string BrutishSwingActionId_P3 = $"ActionId:regex:^(42403|42405)$";
 
 
