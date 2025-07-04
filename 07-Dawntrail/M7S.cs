@@ -23,8 +23,7 @@ using EX = TsingNamespace.Dawntrail.Savage.M7S.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.Dawntrail.Savage.M7S
 {
-    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.3", author: "Mao", note: noteStr)]
-    // [ScriptType(name: "M7S", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", version: "0.0.0.1", author: "Mao", note: noteStr)]
+    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.4", author: "Mao", note: noteStr)]
     public class M7S_Script
     {
 
@@ -132,6 +131,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         }
 
 
+
         [ScriptMethod(name: "死刑 远/近侧挥打 危险区绘制 Smash Here/There Dangerous Zone Draw",
             eventType: EventTypeEnum.StartCasting,
             eventCondition: [DataM7S.SmashHereThereActionId])]
@@ -206,7 +206,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             // TODO 是否可以在孢囊实体出现的时刻，就知道安全区的类型？<= 好像不行，孢囊只有动画没有实体
         }
         [ScriptMethod(name: "P1 种弹播撒(孢囊) 指路绘制一 Pollen Guide Draw 1",
-            eventType: EventTypeEnum.StartCasting, 
+            eventType: EventTypeEnum.StartCasting,
             eventCondition: [DataM7S.PollenActionId])]
         public void P1_PollenGuideDraw1(Event @event, ScriptAccessory accessory)
         {
@@ -644,6 +644,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                                 // 标记 + 打断
                                 bool autoInterrupt = AutoInterruptWildwindsMobsEnable;
                                 uint InterjectActionId = 7538;
+                                uint HeadGrazeActionId = 7551;
                                 if (autoInterrupt
                                     && accessory.Data.MyObject is not null
                                     && accessory.Data.MyObject.IsTank())
@@ -668,7 +669,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                                             {
                                                 if (_obj is IBattleChara _bc && !_bc.IsDead && _bc.IsCasting && _bc.IsCastInterruptible)
                                                 {
-                                                    accessory.Method.UseAction(InterjectActionId, _obj.EntityId);
+                                                    accessory.Method.UseAction(_obj.EntityId, InterjectActionId);
                                                     accessory.Log.Debug($"自动打断 => {accessory.GetMyRole()} to {_obj}");
                                                 }
                                                 await Task.Delay(500); // 等待500毫秒
@@ -1374,11 +1375,11 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 // boss与短边相邻,D3的偶数轮次和近战共用一个点位
                 evenForD3MMW = evenForMeleeMMW;
             }
-            
-            // 画一下奇偶指示点
-                bool isHintFull = !P2StrangeSeedsSimpleStyle;
 
-            
+            // 画一下奇偶指示点
+            bool isHintFull = !P2StrangeSeedsSimpleStyle;
+
+
             if (WalkthroughType == WalkthroughEnum.MMW_SPJP)
             {
                 // (long, long) delay_destoryAt = new(0, 5000);
@@ -1735,6 +1736,43 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             }
         }
 
+        [ScriptMethod(name: "P3 种弹炸裂(黄圈冰花/两轮冰花)预站位 指路绘制 Sinister Seeds Blossom (Yellow) Pre Guide Draw",
+            eventType: EventTypeEnum.StartCasting,
+            eventCondition: [DataM7S.StrangeSeedsVisualActionId_P3])]
+        public void P3_SinisterSeedsBlossomGuideDraw2_Pre(Event @event, ScriptAccessory accessory)
+        {
+            // 在boss读条种弹播撒的时候，绘制预站位, 透明度调整为50%
+            if (@event.SourcePosition.Y > -100) return; // 只在P3阶段绘制
+
+
+            Vector3 endPos = DataM7S.P3_FieldCenter;
+            EX.PlayerRoleEnum myRole = accessory.GetMyRole();
+            bool isFieldBasis = true;
+
+            endPos = (myRole, WalkthroughType, isFieldBasis) switch
+            {
+                (EX.PlayerRoleEnum.MT, WalkthroughEnum.MMW_SPJP, true) => new Vector3(-10, 0, -10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.ST, WalkthroughEnum.MMW_SPJP, true) => new Vector3(10, 0, -10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.H1, WalkthroughEnum.MMW_SPJP, true) => new Vector3(-10, 0, 10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.H2, WalkthroughEnum.MMW_SPJP, true) => new Vector3(10, 0, 10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.D1, WalkthroughEnum.MMW_SPJP, true) => new Vector3(-10, 0, 10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.D2, WalkthroughEnum.MMW_SPJP, true) => new Vector3(10, 0, 10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.D3, WalkthroughEnum.MMW_SPJP, true) => new Vector3(-10, 0, -10) * 0.7f + DataM7S.P3_FieldCenter,
+                (EX.PlayerRoleEnum.D4, WalkthroughEnum.MMW_SPJP, true) => new Vector3(10, 0, -10) * 0.7f + DataM7S.P3_FieldCenter,
+                _ => endPos
+            };
+            EX.MultiDisDrawProp tempProp = new()
+            {
+                BaseDelay = MultiDisProp.BaseDelay,
+                Width = MultiDisProp.Width,
+                EndCircleRadius = MultiDisProp.EndCircleRadius,
+                Color_GoNow = MultiDisProp.Color_GoNow.WithW(0.5f), // 透明度调整为50%
+                Color_GoLater = MultiDisProp.Color_GoLater.WithW(0.5f), // 透明度调整为50%
+                DrawMode = MultiDisProp.DrawMode,
+            };
+            accessory.MultiDisDraw(new List<EX.DisplacementContainer> { new(endPos, 0, 3500) }, tempProp);
+        }
+
         [ScriptMethod(name: "P3 种弹炸裂(黄圈冰花/两轮冰花) 指路绘制 Sinister Seeds Blossom (Yellow) Guide Draw",
             eventType: EventTypeEnum.StartCasting,
             eventCondition: [DataM7S.SinisterSeedsBlossomActionId42392])]
@@ -1762,9 +1800,9 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             bool isSecondRound = false;
             isSecondRound = Util.DistanceByTwoPoints(bossPos, DataM7S.P3_FieldCenter) > 10; //accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).Any(obj => obj is IBattleChara bc && bc.IsCasting);
 
-            bool isFliedBasis = !isSecondRound || (isSecondRound &&!P3MMWZhuiChe);
+            bool isFieldBasis = !isSecondRound || (isSecondRound && !P3MMWZhuiChe);
 
-            endPos = (myRole, WalkthroughType, isFliedBasis) switch
+            endPos = (myRole, WalkthroughType, isFieldBasis) switch
             {
                 (EX.PlayerRoleEnum.MT, WalkthroughEnum.MMW_SPJP, true) => new Vector3(-10, 0, -10) + DataM7S.P3_FieldCenter,
                 (EX.PlayerRoleEnum.MT, WalkthroughEnum.MMW_SPJP, false) => Util.RotatePointInFFXIV(P3MMWZhuiChe_MTD1, Vector3.Zero, bossPosRot) + DataM7S.P3_FieldCenter,
@@ -1816,7 +1854,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         // 剩余工作 
         // P3的嘴炮指路
         // P3碎颈臂冲是否提前
-        // P3黄圈冰花预指路
+        
         // P3黄圈冰花第二轮提前指路
     }
 
@@ -2064,6 +2102,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         public const string AbominableBlinkIconId = "Id:regex:^(0147)$";
         public const string StrangeSeedsActionId = $"ActionId:regex:^(42392)$";
         public const string LashingLariatActionId = $"ActionId:regex:^(42408|42410)$";
+        public const string StrangeSeedsVisualActionId_P3 = $"ActionId:regex:^(43274)$";
         // public const string BrutishSwingActionId_P3 = $"ActionId:regex:^(42403|42405)$";
 
 
@@ -2109,7 +2148,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             BrutishSwingStick_P2 = 42386, //P2 大棒钢铁AOE
             BrutishSwingMachete_P2 = 42387, // P2 月环AOE
             GlowerPower_Straight_P2 = 42373, // BOSS本体嘴炮, cast 2.4s
-        
+
             AbominableBlink = 42377, // GA-100 ,cast 5.0s
             DemolitionDeathmatch = 42390, // Boss->self, 3.0s cast, single-target 连三个人的那个
             GlowerPower_Electrogenetic_P2 = 43340, // 分身读条的分散AOE cast 3.7s
@@ -2133,6 +2172,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             LashingLariatWithLeftHand = 42410, //冲锋，使用左手, 面向BOSS去左侧, cast 3.7s
             GlowerPower_Straight_P3 = 43338, // BOSS本体嘴炮, cast 0.4s
             GlowerPower_Electrogenetic_P3 = 43358, // 分身读条的分散AOE cast 1.7s
+            P2StrangeSeedsVisual = 42391, // Boss->self, 4.0s cast, single-target 黄圈冰花点名启动读条 P2
+            P3StrangeSeedsVisual = 43274, // Boss->self, 4.0s cast, single-target 黄圈冰花点名启动读条 P3
         }
         public enum OID : uint
         {
