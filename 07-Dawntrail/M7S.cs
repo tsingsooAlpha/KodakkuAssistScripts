@@ -23,7 +23,7 @@ using EX = TsingNamespace.Dawntrail.Savage.M7S.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.Dawntrail.Savage.M7S
 {
-    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.4", author: "Mao", note: noteStr)]
+    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.5", author: "Mao", note: noteStr)]
     public class M7S_Script
     {
 
@@ -37,20 +37,6 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
               请将脚本页面中 用户设置 栏目最下侧 指路时使用的绘图类型 调整为Imgui
         """;
 
-        private static readonly object _lock = new object();
-        // private uint LatestStoneringerId = 0;
-        private List<IGameObject> WildwindsMobs = new List<IGameObject>();
-        private Dictionary<ulong, Vector3> WildwindsMobsBornPos = new Dictionary<ulong, Vector3>();
-        private List<ulong> SinisterSeedTargets = new List<ulong>(); // P1/P3 的冰花目标列表, 用于标记冰花目标
-        private uint ExplosionCount = 0;
-        private uint StrangeSeedsCount = 0;
-        // private bool P1_IsLeftDownSafe = false;
-
-        private bool IsAbominableBlinkCasting = false;
-        private bool IsLashingLariatCasting = false;
-        private uint LashingLariatCastingCount = 0; // 标记冲锋释放次数, 同时也作为P3开始的标记
-        private readonly EX.MultiDisDrawProp MultiDisProp = new();
-
 
         [UserSetting("默认职能顺序")]
         public PlayerRoleListEnum RoleMarks8 { get; set; } = PlayerRoleListEnum.MT_ST_H1_H2_D1_D2_D3_D4;
@@ -63,7 +49,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         public WalkthroughEnum WalkthroughType { get; set; } = WalkthroughEnum.MMW_SPJP;
         public enum WalkthroughEnum { MMW_SPJP }
 
-        [UserSetting("启用小怪自动打断(打断目标跟随攻略)")]
+        [UserSetting("实验性功能：启用小怪自动打断(打断目标跟随攻略)")]
         public bool AutoInterruptWildwindsMobsEnable { get; set; } = false;
 
         [UserSetting("P2冰花着色 => 类型: 奇数轮次")]
@@ -96,7 +82,19 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
 
 
+        private static readonly object _lock = new object();
+        // private uint LatestStoneringerId = 0;
+        private List<IGameObject> WildwindsMobs = new List<IGameObject>();
+        private Dictionary<ulong, Vector3> WildwindsMobsBornPos = new Dictionary<ulong, Vector3>();
+        private List<ulong> SinisterSeedTargets = new List<ulong>(); // P1/P3 的冰花目标列表, 用于标记冰花目标
+        private uint ExplosionCount = 0;
+        private uint StrangeSeedsCount = 0;
+        // private bool P1_IsLeftDownSafe = false;
 
+        private bool IsAbominableBlinkCasting = false;
+        private bool IsLashingLariatCasting = false;
+        private uint LashingLariatCastingCount = 0; // 标记冲锋释放次数, 同时也作为P3开始的标记
+        private readonly EX.MultiDisDrawProp MultiDisProp = new();
 
 
 
@@ -111,6 +109,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             IsAbominableBlinkCasting = false;
             IsLashingLariatCasting = false;
             LashingLariatCastingCount = 0;
+            accessory.Method.RemoveDraw(".*");
             accessory.Log.Debug($"M7S Script Init");
 
 
@@ -130,14 +129,12 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             // accessory.Log.Debug($"StoneringerActionId : update LatestStoneringerId => {LatestStoneringerId}");
         }
 
-
-
         [ScriptMethod(name: "死刑 远/近侧挥打 危险区绘制 Smash Here/There Dangerous Zone Draw",
-            eventType: EventTypeEnum.StartCasting,
-            eventCondition: [DataM7S.SmashHereThereActionId])]
+                    eventType: EventTypeEnum.StartCasting,
+                    eventCondition: [DataM7S.SmashHereThereActionId])]
         public void SmashHereThereDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
-            long destoryAt = (long)@event.DurationMilliseconds() + 900;
+            long destoryAt = 3000 + 900;
             uint actionId = @event.ActionId;
             ulong bossId = @event.SourceId;
             float radius_Smash = 6.0f;
@@ -179,7 +176,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         {
             uint actionId = @event.ActionId;
             ulong bossId = @event.SourceId;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 4000;
             (long, long) delay_destoryAt = new(0, destoryAt);
             float radius_Stick = 12.0f;
             float radius_Machete = 9.0f;
@@ -195,11 +192,13 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
         }
 
-        [ScriptMethod(name: "P1 种弹播撒 危险区绘制 Pollen Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.PollenActionId])]
+        [ScriptMethod(name: "P1 种弹播撒 危险区绘制 Pollen Dangerous Zone Draw",
+            eventType: EventTypeEnum.StartCasting,
+            eventCondition: [DataM7S.PollenActionId])]
         public void P1_PollenDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
             Vector3 pos = @event.EffectPosition;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 4000;
             (long, long) delay_destoryAt = new(0, destoryAt);
             float radius_AOE = 8.0f;
             accessory.FastDraw(DrawTypeEnum.Circle, pos, new Vector2(radius_AOE, radius_AOE), delay_destoryAt, false);
@@ -283,7 +282,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         public void P1_RootsOfEvilDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
             Vector3 pos = @event.EffectPosition;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 3000;
             (long, long) delay_destoryAt = new(0, destoryAt);
             float radius_AOE = 12.0f;
             accessory.FastDraw(DrawTypeEnum.Circle, pos, new Vector2(radius_AOE, radius_AOE), delay_destoryAt, false);
@@ -299,7 +298,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             ulong tarId = @event.TargetId;
             if (tarId != accessory.Data.Me || @event.SourcePosition.Y < -100 || LashingLariatCastingCount > 0) return;
 
-            long destoryAt = (long)@event.DurationMilliseconds();
+            // long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 7000;
             float radius_AOE = 4f;
             DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
             dp.Scale = new Vector2(radius_AOE, 20.0f);
@@ -337,7 +337,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
 
             bool isMeGetSinisterSeed = SinisterSeedTargets.Contains((ulong)accessory.Data.Me);
-            long destoryAt = (long)@event.DurationMilliseconds();
+            // long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 7000;
             float radius_AOE = 4f;
 
             // 先指到冰花放置点位, 再指到分摊点位，再指到场地西侧，仅在P1生效
@@ -358,8 +359,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                             }
                             else
                             {
-                                myStartPos = DataM7S.P1_FieldCenter;
-                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -8);
+                                myStartPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -1);
+                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -9);
                             }
                             myStackPos = DataM7S.P1_FieldCenter + new Vector3(-6, 0, 0);
                             myEndPos = DataM7S.P1_FieldCenter + new Vector3(-18, 0, 0);
@@ -377,8 +378,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                             }
                             else
                             {
-                                myStartPos = DataM7S.P1_FieldCenter;
-                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -8);
+                                myStartPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -1);
+                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -9);
                             }
                             myStackPos = DataM7S.P1_FieldCenter + new Vector3(6, 0, 0);
                             myEndPos = DataM7S.P1_FieldCenter + new Vector3(-18, 0, 0);
@@ -431,8 +432,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                             }
                             else
                             {
-                                myStartPos = DataM7S.P1_FieldCenter;
-                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -8);
+                                myStartPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -1);
+                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -9);
                             }
                             myStackPos = DataM7S.P1_FieldCenter + new Vector3(-6, 0, 0);
                             myEndPos = DataM7S.P1_FieldCenter + new Vector3(-18, 0, 0);
@@ -449,8 +450,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                             }
                             else
                             {
-                                myStartPos = DataM7S.P1_FieldCenter;
-                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -8);
+                                myStartPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -1);
+                                myModPos = DataM7S.P1_FieldCenter + new Vector3(0, 0, -9);
                             }
                             myStackPos = DataM7S.P1_FieldCenter + new Vector3(6, 0, 0);
                             myEndPos = DataM7S.P1_FieldCenter + new Vector3(-18, 0, 0);
@@ -529,7 +530,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         {
             // 目标放置米字型冰花
             Vector3 pos = @event.EffectPosition;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            // long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 3000;
             float radius_AOE = 4f;
             DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
             dp.Scale = new Vector2(radius_AOE, 100.0f);
@@ -571,121 +573,117 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         {
             uint actionId = @event.ActionId;
             ulong mobId = @event.SourceId;
-            if (actionId == (uint)DataM7S.AID.WindingWildwinds)
+
+            if (actionId != (uint)DataM7S.AID.WindingWildwinds) return;
+
+
+            bool isGetTwoMobs = false;
+            IGameObject mobObj = accessory.Data.Objects.SearchById(mobId);
+            if (mobObj is not null)
             {
-                bool isGetTwoMobs = false;
-                IGameObject mobObj = accessory.Data.Objects.SearchById(mobId);
-                if (mobObj is not null)
+                lock (_lock)
                 {
-                    lock (_lock)
-                    {
-                        WildwindsMobs.Add(mobObj);
-                        isGetTwoMobs = WildwindsMobs.Count == 2;
-                    }
+                    WildwindsMobs.Add(mobObj);
+                    isGetTwoMobs = WildwindsMobs.Count == 2;
                 }
-                if (isGetTwoMobs)
-                {
-                    // // 把靠近左侧的小怪排到前边
-                    // List<IGameObject> mobs = WildwindsMobs.OrderBy(obj => obj.Position.X).ToList();
-                    // for (int i = 0; i < mobs.Count; i++)
-                    // {
-                    //     IGameObject _obj = mobs[i];
-                    //     KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
-                    //     if( i == 0)
-                    //     {
-                    //         markType = KodakkuAssist.Module.GameOperate.MarkType.Attack7;
-                    //     }
-                    //     else
-                    //     {
-                    //         markType = KodakkuAssist.Module.GameOperate.MarkType.Attack8; 
-                    //     }
-                    //     bool isLocal = true;
-                    //     accessory.Method.Mark((uint)_obj.EntityId, markType, isLocal);
-                    // }
-
-                    // 把出生地点靠近左上的小怪排到前边
-                    List<IGameObject> mobs = WildwindsMobs.OrderBy(obj =>
-                    {
-                        ulong id = obj.GameObjectId;
-                        Vector3 bornPos = obj.Position;
-                        // 去列表中查找出生地点
-                        if (WildwindsMobsBornPos.TryGetValue(id, out Vector3 _bornPos))
-                        {
-                            bornPos = _bornPos;
-                        }
-                        Vector3 leftTop = DataM7S.P1_FieldCenter + new Vector3(-20f, 0, -20f);
-                        return Util.DistanceByTwoPoints(bornPos, leftTop);
-                    }).ToList();
-
-
-                    switch (WalkthroughType)
-                    {
-                        case WalkthroughEnum.MMW_SPJP:
-                            // 标记
-
-                            for (int i = 0; i < mobs.Count; i++)
-                            {
-                                IGameObject _obj = mobs[i];
-                                KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
-                                if (i == 0)
-                                {
-                                    // 给MT的标记攻击7
-                                    markType = KodakkuAssist.Module.GameOperate.MarkType.Attack7;
-                                }
-                                else
-                                {
-                                    // 给ST的标记攻击8
-                                    markType = KodakkuAssist.Module.GameOperate.MarkType.Attack8;
-                                }
-                                bool isLocal = true;
-                                accessory.Method.Mark(_obj.EntityId, markType, isLocal);
-
-
-                                // 标记 + 打断
-                                bool autoInterrupt = AutoInterruptWildwindsMobsEnable;
-                                uint InterjectActionId = 7538;
-                                uint HeadGrazeActionId = 7551;
-                                if (autoInterrupt
-                                    && accessory.Data.MyObject is not null
-                                    && accessory.Data.MyObject.IsTank())
-                                {
-                                    // 我是坦克，并且开启了自动打断功能
-                                    bool isMyMob = false;
-                                    switch (accessory.GetMyRole())
-                                    {
-                                        case EX.PlayerRoleEnum.MT:
-                                            isMyMob = markType == KodakkuAssist.Module.GameOperate.MarkType.Attack7; // MT 是第一个小怪
-                                            break;
-                                        case EX.PlayerRoleEnum.ST:
-                                            isMyMob = markType == KodakkuAssist.Module.GameOperate.MarkType.Attack8; // ST 是第二个小怪
-                                            break;
-                                    }
-                                    if (isMyMob)
-                                    {
-                                        // 自动打断 MT 或 ST
-                                        Task.Run(async () =>
-                                        {
-                                            for (int j = 0; j < 13; j++)
-                                            {
-                                                if (_obj is IBattleChara _bc && !_bc.IsDead && _bc.IsCasting && _bc.IsCastInterruptible)
-                                                {
-                                                    accessory.Method.UseAction(_obj.EntityId, InterjectActionId);
-                                                    accessory.Log.Debug($"自动打断 => {accessory.GetMyRole()} to {_obj}");
-                                                }
-                                                await Task.Delay(500); // 等待500毫秒
-                                            }
-                                        });
-                                    }
-                                }
-                            }
-                            break;
-                    }
-
-                    // 是否为远敏玩家自动选中最近的月环小怪?
-
-                }
-
             }
+            if (!isGetTwoMobs) return;
+            // 把出生地点靠近左上的小怪排到前边
+            List<IGameObject> mobs = WildwindsMobs.OrderBy(obj =>
+            {
+                ulong id = obj.GameObjectId;
+                Vector3 bornPos = obj.Position;
+                // 去列表中查找出生地点
+                if (WildwindsMobsBornPos.TryGetValue(id, out Vector3 _bornPos))
+                {
+                    bornPos = _bornPos;
+                }
+                Vector3 leftTop = DataM7S.P1_FieldCenter + new Vector3(-20f, 0, -20f);
+                return Util.DistanceByTwoPoints(bornPos, leftTop);
+            }).ToList();
+
+            /*
+              MT会拉到两只都读条月环的小怪?
+            */
+
+
+            switch (WalkthroughType)
+            {
+                case WalkthroughEnum.MMW_SPJP:
+                    // 标记
+
+                    for (int i = 0; mobs.Count > 0 && i < mobs.Count; i++)
+                    {
+                        IGameObject _obj = mobs[i];
+                        KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
+                        if (i == 0)
+                        {
+                            // 给MT的标记攻击7
+                            markType = KodakkuAssist.Module.GameOperate.MarkType.Attack7;
+                        }
+                        else
+                        {
+                            // 给ST的标记攻击8
+                            markType = KodakkuAssist.Module.GameOperate.MarkType.Attack8;
+                        }
+                        bool isLocal = true;
+                        accessory.Method.Mark(_obj.EntityId, markType, isLocal);
+
+
+                        // 标记 + 打断
+                        bool autoInterrupt = AutoInterruptWildwindsMobsEnable;
+                        uint InterjectActionId = 7538;
+                        uint HeadGrazeActionId = 7551;
+                        if (autoInterrupt
+                            && accessory.Data.MyObject is not null
+                            && accessory.Data.MyObject.IsTank())
+                        {
+                            // 我是坦克，并且开启了自动打断功能
+                            bool isMyMob = false;
+                            switch (accessory.GetMyRole())
+                            {
+                                case EX.PlayerRoleEnum.MT:
+                                    isMyMob = markType == KodakkuAssist.Module.GameOperate.MarkType.Attack7; // MT 是第一个小怪
+                                    break;
+                                case EX.PlayerRoleEnum.ST:
+                                    isMyMob = markType == KodakkuAssist.Module.GameOperate.MarkType.Attack8; // ST 是第二个小怪
+                                    break;
+                            }
+                            if (isMyMob)
+                            {
+                                // 自动打断 MT 或 ST
+                                Task.Run(async () =>
+                                {
+                                    for (int j = 0; j < 13; j++)
+                                    {
+                                        try
+                                        {
+                                            if (_obj is IBattleChara _bc && !_bc.IsDead && _bc.IsCasting && _bc.IsCastInterruptible)
+                                            {
+                                                accessory.Method.UseAction(_obj.EntityId, InterjectActionId);
+                                                accessory.Log.Debug($"自动打断 => {accessory.GetMyRole()} to {_obj}");
+                                            }
+                                            await Task.Delay(500); // 等待500毫秒
+                                        }
+                                        catch (System.Exception ex)
+                                        {
+                                            accessory.Log.Error($"自动打断异常 => {ex}");
+                                        }
+
+
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    break;
+            }
+
+            // 是否为远敏玩家自动选中最近的月环小怪?
+
+            
+
+            
 
         }
 
@@ -703,7 +701,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             */
             Vector3 bossPos = @event.SourcePosition;
             ulong bossId = @event.SourceId;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            // long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 4000;
 
             // 小怪的实体信息收集
             IEnumerable<IGameObject> mobs = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BloomingAbomination);
@@ -740,7 +739,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 count = ++ExplosionCount;
             }
             Vector3 pos = @event.EffectPosition;
-            (long, long) delay_destoryAtFirst = new(0, (long)@event.DurationMilliseconds());
+            // (long, long) delay_destoryAtFirst = new(0, (long)@event.DurationMilliseconds());
+            (long, long) delay_destoryAtFirst = new(0, 9000);
             float radius_AOE = 25.0f;
             accessory.FastDraw(DrawTypeEnum.Circle, pos, new Vector2(radius_AOE, radius_AOE), delay_destoryAtFirst,
                 accessory.Data.DefaultDangerColor.WithW(1.0f / count));
@@ -874,8 +874,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             DrawPropertiesEdit dpArrow = accessory.Data.GetDefaultDrawProperties();
             dpArrow.Name = "ItCameFromTheDirtGuideDraw 0 " + Guid.NewGuid().ToString();
             // 请微调以下两个数值以达到较优的指路效果
-            dpArrow.Delay = 1650;
-            dpArrow.DestoryAt = 2200;
+            dpArrow.Delay = 1650 - 1650;
+            dpArrow.DestoryAt = 2200 + 1650;
             dpArrow.Scale = new(4);
             dpArrow.ScaleMode |= ScaleMode.YByDistance;
             dpArrow.Owner = bossId;
@@ -906,10 +906,11 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
             dp.Name = nameof(P1_NeoBombarianSpecialSafeZoneDraw) + Guid.NewGuid().ToString();
             dp.Delay = 500; // 由于有时候BOSS会有个转向的动作, 添加一点延迟
-            dp.DestoryAt = (long)@event.DurationMilliseconds() - dp.Delay;
+            // dp.DestoryAt = (long)@event.DurationMilliseconds() - dp.Delay;
+            dp.DestoryAt = 8000 - dp.Delay;
             dp.Scale = new Vector2(8, 30.0f);
             dp.Owner = @event.SourceId;
-            dp.Offset = new Vector3(0, 0, -11);
+            dp.Offset = new Vector3(0, 0, -11.5f);
             dp.Color = accessory.Data.DefaultSafeColor;
             accessory.Method.SendDraw(DrawModeEnum.Default, DrawTypeEnum.Rect, dp);
         }
@@ -928,7 +929,12 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         {
             accessory.FastDraw(DrawTypeEnum.Circle, @event.TargetId, new Vector2(25, 25), new(0, 5000), false);
             // 去到BOSS自己的右前方
-            Vector3 bossPos = @event.SourcePosition;
+            Vector3 bossPos = DataM7S.P2_FieldCenter;
+            IGameObject bossObj = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).FirstOrDefault();
+            if (bossObj is not null)
+            {
+                bossPos = bossObj.Position;
+            }
             bool isBossNearWall = bossPos.Z < DataM7S.P2_FieldCenter.Z;
             Vector3 myPos = isBossNearWall ? new Vector3(12, 0, -24.5f) + DataM7S.P2_FieldCenter : new Vector3(-12, 0, 24.5f) + DataM7S.P2_FieldCenter;
             if ((ulong)accessory.Data.Me == @event.TargetId)
@@ -952,7 +958,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             uint actionId = @event.ActionId;
             ulong bossId = @event.SourceId;
             Vector3 tarPos = @event.EffectPosition;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = @event.SourcePosition.Y < -100 ? 6700 : 8100;
             (long, long) delay_destoryAt = new(0, destoryAt);
             float radius_Stick = 25.0f;
             float radius_Machete = 22.0f;
@@ -1215,13 +1221,16 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
 
 
-        [ScriptMethod(name: "P2 野蛮怒视 危险区绘制 P2 Glower Power Dangerous Zone Draw", eventType: EventTypeEnum.StartCasting, eventCondition: [DataM7S.GlowerPowerActionId])]
+        [ScriptMethod(name: "P2 野蛮怒视 危险区绘制 P2 Glower Power Dangerous Zone Draw",
+            eventType: EventTypeEnum.StartCasting,
+            eventCondition: [DataM7S.GlowerPowerActionId])]
         public void P2_GlowerPowerDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
             /*
                 嘴炮 绘制直线+跟随人物的分散
             */
-            long destoryAt = @event.DurationMilliseconds();
+            // long destoryAt = @event.DurationMilliseconds();
+            long destoryAt = 4000;
             (long, long) delay_destoryAt = new(0, destoryAt);
             // (long, long) delay_destoryAtRect = new (0, destoryAt - 1300);
             float radius_AOE = 6.0f;
@@ -1403,7 +1412,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 count = StrangeSeedsCount++;
             }
             ulong tarId = @event.TargetId;
-            (long Delay, long DestoryAt) delay_destoryAt = new(0, (long)@event.DurationMilliseconds());
+            // (long Delay, long DestoryAt) delay_destoryAt = new(0, (long)@event.DurationMilliseconds());
+            (long Delay, long DestoryAt) delay_destoryAt = new(0, 5000);
             bool isOdd = count % 4 == 0 || count % 4 == 1;
             Vector4 color = isOdd ? StrangeSeedsCountOdd.V4.WithW(P2StrangeSeedsColorDensity) : StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity).WithW(P2StrangeSeedsColorDensity);
             accessory.Log.Debug($"Strange Seeds Counts Draw : count => {count / 2 + 1}");
@@ -1461,7 +1471,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                     && !accessory.Data.MyObject.IsTank()
                     && (accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchI)
                     || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchII)
-                    || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII)))
+                    || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII)
+                    || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIV)))
                 {
                     color = !isOdd ? StrangeSeedsCountOdd.V4.WithW(P2StrangeSeedsColorDensity) : StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity);
                     accessory.FastDraw(DrawTypeEnum.Circle,
@@ -1630,7 +1641,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             uint actionId = @event.ActionId;
             ulong bossId = @event.SourceId;
             Vector3 tarPos = @event.EffectPosition;
-            long destoryAt = (long)@event.DurationMilliseconds();
+            // long destoryAt = (long)@event.DurationMilliseconds();
+            long destoryAt = 4000;
             (long, long) delay_destoryAt = new(0, destoryAt);
             Vector2 scale = new(32.0f, 70.0f);
             // accessory.FastDraw(DrawTypeEnum.Rect, bossId, scale, delay_destoryAt, false);
@@ -1639,7 +1651,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             DrawPropertiesEdit dp = accessory.Data.GetDefaultDrawProperties();
             dp.Name = nameof(P3_LashingLariatDangerousZoneDraw) + Guid.NewGuid().ToString();
             dp.Delay = 0;
-            dp.DestoryAt = (long)@event.DurationMilliseconds();
+            dp.DestoryAt = destoryAt;
             dp.Scale = new Vector2(32.0f, 70.0f);
             dp.Owner = @event.SourceId;
             dp.Offset = new Vector3(offsetX, 0, 0);
@@ -1724,7 +1736,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                     bool isMeGetThornyDeathmatch = accessory.Data.MyObject is not null
                         && (accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchI)
                         || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchII)
-                        || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII));
+                        || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII)
+                        || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIV));
                     if (isMeGetThornyDeathmatch)
                     {
                         // 我有连线, 去最近的分摊点位
@@ -1758,7 +1771,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             bool isMeGetThornyDeathmatch = accessory.Data.MyObject is not null
                 && (accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchI)
                 || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchII)
-                || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII));
+                || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII)
+                || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIV));
             if (!isMeGetThornyDeathmatch)
             {
                 switch (WalkthroughType)
@@ -1801,7 +1815,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             bool isMeGetThornyDeathmatch = accessory.Data.MyObject is not null
                 && (accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchI)
                 || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchII)
-                || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII));
+                || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII)
+                || accessory.Data.MyObject.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIV));
             bool isMeGetSinisterSeed = SinisterSeedTargets.Contains((ulong)accessory.Data.Me);
             Vector3 endPos = Vector3.Zero;
             if (isMeGetSinisterSeed)
@@ -1942,7 +1957,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 (EX.PlayerRoleEnum.D3, WalkthroughEnum.MMW_SPJP, false) => Util.RotatePointInFFXIV(P3MMWZhuiChe_H1D3, Vector3.Zero, bossPosRot) + DataM7S.P3_FieldCenter,
                 (EX.PlayerRoleEnum.D4, WalkthroughEnum.MMW_SPJP, true) => new Vector3(10, 0, -10) + DataM7S.P3_FieldCenter,
                 (EX.PlayerRoleEnum.D4, WalkthroughEnum.MMW_SPJP, false) => Util.RotatePointInFFXIV(P3MMWZhuiChe_H2D4, Vector3.Zero, bossPosRot) + DataM7S.P3_FieldCenter,
-                _ => endPos
+                _ => endPos + DataM7S.P3_FieldCenter
             };
             accessory.MultiDisDraw(new List<EX.DisplacementContainer> { new(endPos, 0, 5200) }, MultiDisProp);
         }
@@ -2089,7 +2104,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 dp_goNowLine.Owner = (ulong)accessory.Data.Me;
                 dp_goNowLine.Scale = new(prop.Width);
                 dp_goNowLine.Delay = startTimeMillis + dis.Delay - Math.Sign(i) * preMs;
-                dp_goNowLine.DestoryAt = dis.DestoryAt - preMs / 3;
+                dp_goNowLine.DestoryAt = dis.DestoryAt - preMs / 3 - (prop.DrawMode == DrawModeEnum.Imgui ? 200 : 0);
                 dp_goNowLine.ScaleMode |= ScaleMode.YByDistance;
                 dp_goNowLine.TargetPosition = dis.Pos;
                 dp_goNowLine.Color = prop.Color_GoNow;
@@ -2119,7 +2134,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                     dp_goLaterLine.Scale = new(prop.Width);
                     dp_goLaterLine.ScaleMode |= ScaleMode.YByDistance;
                     dp_goLaterLine.Delay = prop.BaseDelay + list[0].Delay;
-                    dp_goLaterLine.DestoryAt = startTimeMillis - (prop.BaseDelay + list[0].Delay) - 100;
+                    dp_goLaterLine.DestoryAt = startTimeMillis - (prop.BaseDelay + list[0].Delay) - 100 - (prop.DrawMode == DrawModeEnum.Imgui ? 200 : 0);
                     dp_goLaterLine.Color = prop.Color_GoLater;
                     accessory.Method.SendDraw(prop.DrawMode, DrawTypeEnum.Displacement, dp_goLaterLine);
 
@@ -2149,12 +2164,12 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             D1 = 4, D2 = 5, D3 = 6, D4 = 7,
             Unknown = -1
         }
-        public static uint DurationMilliseconds(this Event @event)
-        {
-            string _dm = @event["DurationMilliseconds"];
-            _dm = _dm.Length < 10 ? _dm : "404404404";
-            return JsonConvert.DeserializeObject<uint>(_dm);
-        }
+        // public static uint DurationMilliseconds(this Event @event)
+        // {
+        //     string _dm = @event["DurationMilliseconds"];
+        //     _dm = _dm.Length < 10 ? _dm : "404404404";
+        //     return JsonConvert.DeserializeObject<uint>(_dm);
+        // }
         public static PlayerRoleEnum GetMyRole(this ScriptAccessory accessory)
         {
             uint myId = accessory.Data.Me;
@@ -2308,6 +2323,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             ThornyDeathmatchI = 4466, // 荆棘生死战I, 不可以转移的那个类型
             ThornyDeathmatchII = 4467, // 荆棘生死战II
             ThornyDeathmatchIII = 4468, // 荆棘生死战III
+            ThornyDeathmatchIV = 4469, // 荆棘生死战IV
         }
     }
     #endregion
