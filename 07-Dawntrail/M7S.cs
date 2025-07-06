@@ -23,7 +23,7 @@ using EX = TsingNamespace.Dawntrail.Savage.M7S.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.Dawntrail.Savage.M7S
 {
-    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.5", author: "Mao", note: noteStr)]
+    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.6", author: "Mao", note: noteStr)]
     public class M7S_Script
     {
 
@@ -33,8 +33,15 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         const string noteStr =
         """
             1.指路部分目前已适配国服MMW攻略
+              如果你没有开启其他插件，通常默认设置已经足够通关国服野队
             2.启用了"设置 - 绘制 - 仅绘制强制指定为Imgui模式的元素"功能的用户，
               请将脚本页面中 用户设置 栏目最下侧 指路时使用的绘图类型 调整为Imgui
+            3.关于P2P3冰花没有着色指引或者指路绘图的情况，请确保相关触发器为启用状态(两两冰花/两轮冰花)
+              出现相关问题可以勾选 
+              用户设置最下侧 P3两轮冰花Debug模式
+              将会在默语频道发送简易logs信息，可以在问题反馈时附上截图
+              如果安装了bby，可以尝试关闭后再dalamud插件界面闭开关可达鸭插件。
+            4.关于长时间战斗后，绘图概率不显示的用户，也可以尝试上述操作。
         """;
 
 
@@ -79,6 +86,9 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
         [UserSetting("指路时使用的绘图类型")]
         public DrawModeEnum GuideDrawMode { get; set; } = DrawModeEnum.Default;
+
+        [UserSetting("P3两轮冰花Debug模式")]
+        public bool P3MMWZhuiCheDebug { get; set; } = false;
 
 
 
@@ -1915,13 +1925,20 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             eventCondition: [DataM7S.SinisterSeedsBlossomActionId42392])]
         public void P3_SinisterSeedsBlossomGuideDraw2(Event @event, ScriptAccessory accessory)
         {
-            if (@event.SourcePosition.Y > -100) return; // 只在P3阶段绘制
+            if (@event.SourcePosition.Y > -100)
+            { 
+                if (P3MMWZhuiCheDebug) accessory.Method.SendChat("/e 检测到黄圈冰花，但不是P3阶段");
+                return; // 只在P3阶段绘制
+            }
             if (@event.TargetId != (ulong)accessory.Data.Me)
             {
                 // 不是自己的冰花, 不进行额外绘制
+                if (P3MMWZhuiCheDebug) accessory.Method.SendChat("/e 检测到黄圈冰花，但这个黄圈的目标不是你");
                 return;
             }
             EX.PlayerRoleEnum myRole = accessory.GetMyRole();
+            if (P3MMWZhuiCheDebug) accessory.Method.SendChat($"/e 你的职能是 {myRole}");
+            if (P3MMWZhuiCheDebug) accessory.Method.SendChat($"/e 采用攻略是 {WalkthroughType}");
             Vector3 endPos = Vector3.Zero;
             Vector3 bossPos = @event.SourcePosition;
             // Vector3 bossToC = DataM7S.P3_FieldCenter - bossPos;
@@ -1938,6 +1955,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             isSecondRound = Util.DistanceByTwoPoints(bossPos, DataM7S.P3_FieldCenter) > 10; //accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).Any(obj => obj is IBattleChara bc && bc.IsCasting);
 
             bool isFieldBasis = !isSecondRound || (isSecondRound && !P3MMWZhuiChe);
+            if (P3MMWZhuiCheDebug) accessory.Method.SendChat($"/e 是第{(isSecondRound?2:1)}轮冰花，追车吗?({(isFieldBasis?"否":"是")})");
 
             endPos = (myRole, WalkthroughType, isFieldBasis) switch
             {
@@ -1959,6 +1977,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 (EX.PlayerRoleEnum.D4, WalkthroughEnum.MMW_SPJP, false) => Util.RotatePointInFFXIV(P3MMWZhuiChe_H2D4, Vector3.Zero, bossPosRot) + DataM7S.P3_FieldCenter,
                 _ => endPos + DataM7S.P3_FieldCenter
             };
+            if (P3MMWZhuiCheDebug) accessory.Method.SendChat($"/e 你的就位点是 {endPos}");
             accessory.MultiDisDraw(new List<EX.DisplacementContainer> { new(endPos, 0, 5200) }, MultiDisProp);
         }
 
