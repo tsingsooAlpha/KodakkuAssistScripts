@@ -23,7 +23,7 @@ using EX = TsingNamespace.Dawntrail.Savage.M7S.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.Dawntrail.Savage.M7S
 {
-    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.6", author: "Mao", note: noteStr)]
+    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.7", author: "Mao", note: noteStr)]
     public class M7S_Script
     {
 
@@ -42,6 +42,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
               将会在默语频道发送简易logs信息，可以在问题反馈时附上截图
               如果安装了bby，可以尝试关闭后再dalamud插件界面闭开关可达鸭插件。
             4.关于长时间战斗后，绘图概率不显示的用户，也可以尝试上述操作。
+            5.如果你启用了实验性功能后出现游戏掉线或者客户端崩溃/闪退等情况
+              请尝试关闭头顶标记功能，或者关闭所有实验性功能。
         """;
 
 
@@ -56,8 +58,20 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         public WalkthroughEnum WalkthroughType { get; set; } = WalkthroughEnum.MMW_SPJP;
         public enum WalkthroughEnum { MMW_SPJP }
 
+        [UserSetting("实验性功能：启用小怪自动挑衅(小怪组别跟随攻略)")]
+        public bool AutoProvokeWildwindsMobsEnable { get; set; } = false;
+        public enum 挑衅策略 { 刷新时挑衅较远的小怪 , 刷新7秒后挑衅非引战小怪 }
+        [UserSetting("实验性功能：小怪自动挑衅策略")]
+        public 挑衅策略 AutoProvokeStrategy { get; set; } = 挑衅策略.刷新7秒后挑衅非引战小怪;
+
         [UserSetting("实验性功能：启用小怪自动打断(打断目标跟随攻略)")]
         public bool AutoInterruptWildwindsMobsEnable { get; set; } = false;
+        [UserSetting("实验性功能：启用坦克自动支援减")]
+        public bool AutoTankSupportEnable { get; set; } = false;
+        [UserSetting("实验性功能：小怪相关机制启用头顶标记功能")]
+        public bool AutoMobsMarkEnable { get; set; } = true;
+
+
 
         [UserSetting("P2冰花着色 => 类型: 奇数轮次")]
         public ScriptColor StrangeSeedsCountOdd { get; set; } = new() { V4 = new(0, 1, 1, 2) };
@@ -576,17 +590,156 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 WildwindsMobsBornPos[mobId] = @event.SourcePosition;
             }
         }
-        [ScriptMethod(name: "P1 小怪环形突风 标记并打断 Mobs Winds Casting Mark and Interrupt",
+
+        [ScriptMethod(name: "P1/P3 恨心花芽 加入战斗时 自动挑衅 Blooming Abomination Add Combatant Auto Provoke",
+            eventType: EventTypeEnum.AddCombatant,
+            eventCondition: [DataM7S.BloomingAbominationDataId],
+            suppress: 10000,
+            userControl: true)]
+        public async void P1P3_BloomingAbominationAddAutoProvoke(Event @event, ScriptAccessory accessory)
+        {
+            if (!AutoProvokeWildwindsMobsEnable) return;
+            try
+            {
+                if (!accessory.Data.MyObject.IsTank()) return;
+            }
+            catch (System.Exception ex)
+            {
+                return;
+            }
+            await Task.Delay(1000); // 等待小怪加入战斗
+            EX.PlayerRoleEnum myRole = accessory.GetMyRole();
+            List<IGameObject> mobs = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BloomingAbomination).ToList();
+            Vector3 fieldCenter = @event.SourcePosition.Y > -100 ? DataM7S.P1_FieldCenter : DataM7S.P3_FieldCenter;
+            Vector3 myPrefPos = fieldCenter;
+
+            myPrefPos = (myRole, WalkthroughType) switch
+            {
+                (EX.PlayerRoleEnum.MT, WalkthroughEnum.MMW_SPJP) => fieldCenter + new Vector3(-30, 0, -30),
+                (EX.PlayerRoleEnum.ST, WalkthroughEnum.MMW_SPJP) => fieldCenter + new Vector3(30, 0, 30),
+                _ => myPrefPos
+            };
+            mobs = mobs
+                .OrderBy(mob => Util.DistanceByTwoPoints(mob.Position, myPrefPos)) // 按照距离排序
+                .ToList();
+            List<IGameObject> myMobs = new List<IGameObject>();
+            if (mobs.Count <= 2)
+            {
+                myMobs = mobs;
+            }
+            else
+            {
+                // myMobs = myRole == EX.PlayerRoleEnum.MT ? mobs.Take(2).ToList() : mobs.TakeLast(2).ToList();
+                myMobs = mobs.Take(2).ToList();
+            }
+            // 至此应该要拿到自己要拉的两只小怪了
+            List<KodakkuAssist.Module.GameOperate.MarkType> markTypes = new List<KodakkuAssist.Module.GameOperate.MarkType>
+            {
+                KodakkuAssist.Module.GameOperate.MarkType.Stop1,
+                KodakkuAssist.Module.GameOperate.MarkType.Stop2,
+                KodakkuAssist.Module.GameOperate.MarkType.Bind1,
+                KodakkuAssist.Module.GameOperate.MarkType.Bind2,
+                KodakkuAssist.Module.GameOperate.MarkType.Bind3,
+            };
+
+            bool isMarkLocal = true;
+            for (int i = 0; i < myMobs.Count; i++)
+            {
+                IGameObject _obj = myMobs[i];
+                KodakkuAssist.Module.GameOperate.MarkType markType = markTypes[i];
+                if(AutoMobsMarkEnable) accessory.Method.Mark(_obj.EntityId, markType, isMarkLocal);
+                await Task.Delay(10); // 等待10毫秒
+                // 标记一下
+            }
+            int delayTime = AutoProvokeStrategy switch
+            {
+                挑衅策略.刷新时挑衅较远的小怪 => 100,
+                挑衅策略.刷新7秒后挑衅非引战小怪 => 5900,
+                _ => 100,
+            };
+            await Task.Delay(delayTime); // 等待一段时间
+            IGameObject? provokeTarget = null;
+            switch (AutoProvokeStrategy)
+            {
+                case 挑衅策略.刷新时挑衅较远的小怪:
+                    try
+                    {
+                        myMobs = myMobs.OrderBy(mob => Util.DistanceByTwoPoints(mob.Position, accessory.Data.MyObject.Position)).ToList();
+                    }
+                    finally
+                    {
+                        provokeTarget = myMobs.LastOrDefault();
+                    }
+                    break;
+                case 挑衅策略.刷新7秒后挑衅非引战小怪:
+                    try
+                    {
+                        List<IGameObject> nonTankMobs = mobs.Where(mob => mob.TargetObject is null || mob.TargetObject.EntityId != accessory.Data.Me).ToList();
+                        // 而且我当前的目标不是这只小怪
+                        nonTankMobs = nonTankMobs
+                            .Where(mob => accessory.Data.MyObject.TargetObject is null || accessory.Data.MyObject.TargetObject.EntityId != mob.EntityId)
+                            .ToList();
+                        provokeTarget = myMobs.LastOrDefault();
+                    }
+                    catch
+                    {
+                        // nothing
+                    }
+                    // 只挑衅非引战小怪
+                    break;
+            }
+            if (provokeTarget is not null)
+            {
+                Task.Run(async () =>
+                    {
+                        uint provokeActionId = 7533; // 挑衅技能ID
+                        if(AutoMobsMarkEnable) accessory.Method.Mark(provokeTarget.EntityId, KodakkuAssist.Module.GameOperate.MarkType.Cross, isMarkLocal);
+                        accessory.Log.Debug($"尝试挑衅小怪 {provokeTarget}");
+                        accessory.Method.SendChat($"/e 尝试挑衅\"＋\"标记小怪 {provokeTarget} <se.5>");
+                        for (int j = 0; j < 6; j++)
+                        {
+                            try
+                            {
+                                if (provokeTarget is IBattleChara _bc && !_bc.IsDead && !accessory.Data.MyObject.IsDead)
+                                {
+                                    accessory.Method.UseAction(provokeTarget.EntityId, provokeActionId);
+                                    accessory.Log.Debug($"自动挑衅 => {accessory.GetMyRole()} to {provokeTarget}");
+                                }
+                                await Task.Delay(500); // 等待500毫秒
+                            }
+                            catch (System.Exception ex)
+                            {
+                                accessory.Log.Error($"自动挑衅异常 => {ex}");
+                            }
+                        }
+                    });
+            }
+            await Task.Delay(6000);
+
+            // 清除标记
+            accessory.Method.SendChat($"/mk clear <stop1>");
+            accessory.Method.SendChat($"/mk clear <stop2>");
+            accessory.Method.SendChat($"/mk clear <cross>");
+        }
+
+
+        [ScriptMethod(name: "P1 小怪环形突风 自动打断 Mobs Winds Casting Mark and Interrupt",
             eventType: EventTypeEnum.StartCasting,
             eventCondition: [DataM7S.MobsWindsActionId])]
-        public void MobsWindsCastingMark(Event @event, ScriptAccessory accessory)
+        public async void MobsWindsCastingMark(Event @event, ScriptAccessory accessory)
         {
+            if (!AutoInterruptWildwindsMobsEnable) return;
+            try
+            {
+                if (!accessory.Data.MyObject.IsTank()) return;
+            }
+            catch (System.Exception ex)
+            {
+                return;
+            }
             uint actionId = @event.ActionId;
             ulong mobId = @event.SourceId;
-
             if (actionId != (uint)DataM7S.AID.WindingWildwinds) return;
-
-
             bool isGetTwoMobs = false;
             IGameObject mobObj = accessory.Data.Objects.SearchById(mobId);
             if (mobObj is not null)
@@ -598,6 +751,41 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 }
             }
             if (!isGetTwoMobs) return;
+
+
+            List<uint> castingMobs = new List<uint>();
+            List<uint> rawHostileList = new List<uint>();
+
+            try
+            {
+                unsafe
+                {
+                    // 获取仇恨列表中的小怪ID
+                    for (int i = 0; i < 5; i++)
+                    {
+                        FFXIVClientStructs.FFXIV.Client.UI.Arrays.EnemyListNumberArray.EnemyListEnemyNumberArray* _hostileObj =
+                            (FFXIVClientStructs.FFXIV.Client.UI.Arrays.EnemyListNumberArray.EnemyListEnemyNumberArray*)
+                            ((byte*)FFXIVClientStructs.FFXIV.Client.UI.Arrays.EnemyListNumberArray.Instance() + 5 * 4 + i * (6 * 4));
+                        accessory.Log.Debug($"Test: 在列表中获取敌人{i}  => {_hostileObj->EntityId} = {accessory.Data.Objects.SearchByEntityId((uint)(_hostileObj->EntityId))}");
+                        if (_hostileObj->EntityId > 0x40_000_000)
+                        { 
+                            rawHostileList.Add((uint)_hostileObj->EntityId);
+                        }
+
+                            
+                    }
+                    castingMobs = rawHostileList
+                        .Where(id => accessory.Data.Objects.SearchByEntityId(id) is IBattleChara bc && bc.IsCasting && bc.CastActionId == (uint)DataM7S.AID.WindingWildwinds)
+                        .ToList();
+                    // 过滤出正在读条的月环小怪ID
+                }
+            }
+            catch (System.Exception ex)
+            {
+                accessory.Log.Error($"获取正在读条的月环小怪异常 => {ex}");
+            }
+
+
             // 把出生地点靠近左上的小怪排到前边
             List<IGameObject> mobs = WildwindsMobs.OrderBy(obj =>
             {
@@ -612,11 +800,12 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 return Util.DistanceByTwoPoints(bornPos, leftTop);
             }).ToList();
 
+
             /*
               MT会拉到两只都读条月环的小怪?
             */
 
-
+            KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
             switch (WalkthroughType)
             {
                 case WalkthroughEnum.MMW_SPJP:
@@ -625,21 +814,24 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                     for (int i = 0; mobs.Count > 0 && i < mobs.Count; i++)
                     {
                         IGameObject _obj = mobs[i];
-                        KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
-                        if (i == 0)
+
+                        // 查找这个Obj的ID在 castingMobs 中的位置
+                        int indexInHostileList = castingMobs.IndexOf(_obj.EntityId);
+                        switch (indexInHostileList)
                         {
-                            // 给MT的标记攻击7
-                            markType = KodakkuAssist.Module.GameOperate.MarkType.Attack7;
-                        }
-                        else
-                        {
-                            // 给ST的标记攻击8
-                            markType = KodakkuAssist.Module.GameOperate.MarkType.Attack8;
+                            case -1:
+                                // 不在列表中
+                                markType = markType == KodakkuAssist.Module.GameOperate.MarkType.Stop1 ? KodakkuAssist.Module.GameOperate.MarkType.Stop1 : KodakkuAssist.Module.GameOperate.MarkType.Stop2;
+                                break;
+                            case 0:
+                                markType = KodakkuAssist.Module.GameOperate.MarkType.Attack7;
+                                break;
+                            case 1:
+                                markType = KodakkuAssist.Module.GameOperate.MarkType.Attack8;
+                                break;
                         }
                         bool isLocal = true;
-                        accessory.Method.Mark(_obj.EntityId, markType, isLocal);
-
-
+                        if(AutoMobsMarkEnable) accessory.Method.Mark(_obj.EntityId, markType, isLocal);
                         // 标记 + 打断
                         bool autoInterrupt = AutoInterruptWildwindsMobsEnable;
                         uint InterjectActionId = 7538;
@@ -664,11 +856,12 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                                 // 自动打断 MT 或 ST
                                 Task.Run(async () =>
                                 {
+                                    accessory.Method.SendChat($"/e 尝试打断 {markType} {_obj} <se.5>，它也许是仇恨列表中的第{rawHostileList.IndexOf(_obj.EntityId) + 1}个栏目");
                                     for (int j = 0; j < 13; j++)
                                     {
                                         try
                                         {
-                                            if (_obj is IBattleChara _bc && !_bc.IsDead && _bc.IsCasting && _bc.IsCastInterruptible)
+                                            if (_obj is IBattleChara _bc && !_bc.IsDead && _bc.IsCasting && _bc.IsCastInterruptible && !accessory.Data.MyObject.IsDead)
                                             {
                                                 accessory.Method.UseAction(_obj.EntityId, InterjectActionId);
                                                 accessory.Log.Debug($"自动打断 => {accessory.GetMyRole()} to {_obj}");
@@ -679,21 +872,20 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                                         {
                                             accessory.Log.Error($"自动打断异常 => {ex}");
                                         }
-
-
                                     }
                                 });
                             }
                         }
+                        await Task.Delay(10);
                     }
                     break;
             }
 
             // 是否为远敏玩家自动选中最近的月环小怪?
 
-            
 
-            
+
+
 
         }
 
@@ -953,6 +1145,110 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 EX.DisplacementContainer myEndPos = new(myPos, 0, 5000);
                 accessory.MultiDisDraw(new List<EX.DisplacementContainer> { myEndPos }, MultiDisProp);
             }
+        }
+
+        [ScriptMethod(name: "P2 野蛮电火花(GA-100) 坦克职能自动支援减 Abominable Blink Tank Support",
+            eventType: EventTypeEnum.TargetIcon,
+            eventCondition: [DataM7S.AbominableBlinkIconId])]
+        public void P2_AbominableBlinkTankSupport(Event @event, ScriptAccessory accessory)
+        {
+            uint tarId = (uint)@event.TargetId;
+            IPlayerCharacter? myChara = accessory.Data.MyObject;
+            if (myChara is null || !myChara.IsTank() || myChara.IsDead) return;
+            List<IBattleChara> thornyDeathmatchPlayers = new List<IBattleChara>();
+            try
+            {
+                foreach (uint id in accessory.Data.PartyList)
+                {
+                    IGameObject obj = accessory.Data.Objects.SearchById((ulong)id);
+                    if (obj is IBattleChara bc && !bc.IsDead && (
+                        bc.HasStatus((uint)DataM7S.SID.ThornyDeathmatchI)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornyDeathmatchII)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIII)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornyDeathmatchIV)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornsOfDeathI)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornsOfDeathII)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornsOfDeathIII)
+                        || bc.HasStatus((uint)DataM7S.SID.ThornsOfDeathIV)
+                    ))
+                    {
+                        thornyDeathmatchPlayers.Add(bc);
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                accessory.Log.Error($"获取荆棘缠绕玩家异常 => {ex}");
+            }
+            if (thornyDeathmatchPlayers.Count == 0) return;
+            uint toSupportId = 0;
+            if (thornyDeathmatchPlayers.Count == 1)
+            {
+                // 只有一个荆棘缠绕玩家, 一般是一仇, 给他支援减即可
+                if (tarId != accessory.Data.Me) toSupportId = tarId;
+            }
+            else
+            {
+                // 查找短边连线的玩家是否离BOSS较近。
+                IGameObject bossObj = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).FirstOrDefault();
+                Vector3 bossPos = DataM7S.P2_FieldCenter;
+                if (bossObj is not null)
+                {
+                    bossPos = bossObj.Position;
+                }
+                bool isBossNearWall = bossPos.Z < DataM7S.P2_FieldCenter.Z;
+                if (isBossNearWall)
+                {
+                    // BOSS靠近短边，给短边处的非坦克玩家支援减
+                    IGameObject? toSupportObj = thornyDeathmatchPlayers.Where(bc => !bc.IsTank())
+                                                                       .OrderBy(bc => Util.DistanceByTwoPoints(bc.Position, new Vector3(0, 0, -35) + DataM7S.P2_FieldCenter))
+                                                                       .FirstOrDefault();
+                    if (toSupportObj is not null)
+                    {
+                        toSupportId = toSupportObj.EntityId;
+                        accessory.Log.Debug($"P2 AbominableBlinkTankSupport: 给短边连线玩家 {toSupportId} 支援减");
+                    }
+                }
+                else
+                {
+                    // BOSS远离短边，给目标T支援减
+                    if (tarId != accessory.Data.Me) toSupportId = tarId;
+                }
+            }
+            if (toSupportId == 0) return;
+            // 给目标T支援减
+            uint mySupportActionId = accessory.MyJob() switch
+            {
+                EX.Job.WAR => 16464, // 绿血气
+                EX.Job.PLD => 7382, // 干预
+                EX.Job.DRK => 7393, // 黑盾
+                EX.Job.GNB => 25758, // 中断
+                _ => 0,
+            };
+            if (mySupportActionId == 0) return;
+            accessory.Log.Debug($"P2 AbominableBlinkTankSupport: 自动给 {toSupportId} 支援减");
+            Task.Run(async () =>
+            {
+                await Task.Delay(1500); // 等待1500毫秒
+                IGameObject? toSupportObj = accessory.Data.Objects.SearchById((ulong)toSupportId);
+                accessory.Method.SendChat($"/e 尝试给 {toSupportObj} 支援减 <se.5>");
+                for (int j = 0; j < 6; j++)
+                {
+                    try
+                    {
+                        if (toSupportObj is IBattleChara _bc && !_bc.IsDead && !accessory.Data.MyObject.IsDead)
+                        {
+                            accessory.Method.UseAction(toSupportObj.EntityId, mySupportActionId);
+                            accessory.Log.Debug($"自动支援减 => {accessory.GetMyRole()} to {toSupportObj}");
+                        }
+                        await Task.Delay(500); // 等待500毫秒
+                    }
+                    catch (System.Exception ex)
+                    {
+                        accessory.Log.Error($"自动支援减异常 => {ex}");
+                    }
+                }
+            });
         }
 
 
@@ -1374,8 +1670,8 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                     delay_destoryAt.DestoryAt += 1000; // 多画一秒钟
                     accessory.FastDraw(DrawTypeEnum.Circle, safePos1MMW + DataM7S.P2_FieldCenter, new Vector2(2.0f, 2.0f), delay_destoryAt, accessory.Data.DefaultSafeColor.WithW(0.25f), GuideDrawMode);
                     accessory.FastDraw(DrawTypeEnum.Circle, safePos2MMW + DataM7S.P2_FieldCenter, new Vector2(2.0f, 2.0f), delay_destoryAt, accessory.Data.DefaultSafeColor.WithW(0.25f), GuideDrawMode);
-       
-                     // 只画自己的职能
+
+                    // 只画自己的职能
                     switch (accessory.GetMyRole())
                     {
                         case EX.PlayerRoleEnum.MT:
@@ -1400,7 +1696,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                             accessory.FastDraw(DrawTypeEnum.Donut, evenForD4MMW + DataM7S.P2_FieldCenter, size, delay_destoryAt, StrangeSeedsCountEven.V4.WithW(P2StrangeSeedsColorDensity), GuideDrawMode);
                             break;
                     }
-                    
+
                 }
             }
         }
@@ -1926,7 +2222,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         public void P3_SinisterSeedsBlossomGuideDraw2(Event @event, ScriptAccessory accessory)
         {
             if (@event.SourcePosition.Y > -100)
-            { 
+            {
                 if (P3MMWZhuiCheDebug) accessory.Method.SendChat("/e 检测到黄圈冰花，但不是P3阶段");
                 return; // 只在P3阶段绘制
             }
@@ -1955,7 +2251,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             isSecondRound = Util.DistanceByTwoPoints(bossPos, DataM7S.P3_FieldCenter) > 10; //accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).Any(obj => obj is IBattleChara bc && bc.IsCasting);
 
             bool isFieldBasis = !isSecondRound || (isSecondRound && !P3MMWZhuiChe);
-            if (P3MMWZhuiCheDebug) accessory.Method.SendChat($"/e 是第{(isSecondRound?2:1)}轮冰花，追车吗?({(isFieldBasis?"否":"是")})");
+            if (P3MMWZhuiCheDebug) accessory.Method.SendChat($"/e 是第{(isSecondRound ? 2 : 1)}轮冰花，追车吗?({(isFieldBasis ? "否" : "是")})");
 
             endPos = (myRole, WalkthroughType, isFieldBasis) switch
             {
@@ -2010,8 +2306,10 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         // 剩余工作 
         // P3的嘴炮指路
         // P3碎颈臂冲是否提前
-        
         // P3黄圈冰花第二轮提前指路
+        // 挑衅组内较远的小怪，标记为禁止2，较近的小怪标记禁止1，如果是P1则5秒后清楚标记
+        // 读取内存获得小怪的在仇恨列表中的上下信息。
+        // 在GA-100时，BOSS靠近短墙且D3有连线，则给D3一个单保
     }
 
 
@@ -2200,12 +2498,252 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
                 return (PlayerRoleEnum)myIndex;
             }
             else
-            { 
+            {
                 return PlayerRoleEnum.Unknown;
             }
-            
-            
+
+
         }
+        public static Job MyJob(this ScriptAccessory accessory)
+        {
+            try
+            {
+                IPlayerCharacter? myChara = accessory.Data.MyObject;
+                if (myChara is not null && Enum.IsDefined(typeof(Job), (byte)myChara.ClassJob.RowId))
+                {
+                    return (Job)myChara.ClassJob.RowId;
+                }
+                else
+                {
+                    return Job.ADV;
+                }
+            }
+            catch (Exception ex)
+            {
+                accessory.Log.Error($"获取职业失败: {ex.Message}");
+                return Job.ADV;
+            }
+
+        }
+        
+        public enum Job : byte
+        {
+            /// <summary>
+            /// Adventurer 
+            /// </summary>
+            ADV = 0,
+
+            /// <summary>
+            /// Gladiator 
+            /// </summary>
+            GLA = 1,
+
+            /// <summary>
+            /// Pugilist 
+            /// </summary>
+            PGL = 2,
+
+            /// <summary>
+            /// Marauder 
+            /// </summary>
+            MRD = 3,
+
+            /// <summary>
+            /// Lancer 
+            /// </summary>
+            LNC = 4,
+
+            /// <summary>
+            /// Archer 
+            /// </summary>
+            ARC = 5,
+
+            /// <summary>
+            /// Conjurer 
+            /// </summary>
+            CNJ = 6,
+
+            /// <summary>
+            /// Thaumaturge
+            /// </summary>
+            THM = 7,
+
+            /// <summary>
+            /// Carpenter
+            /// </summary>
+            CRP = 8,
+
+            /// <summary>
+            /// Blacksmith
+            /// </summary>
+            BSM = 9,
+
+            /// <summary>
+            /// Armorer
+            /// </summary>
+            ARM = 10,
+
+            /// <summary>
+            /// Goldsmith
+            /// </summary>
+            GSM = 11,
+
+            /// <summary>
+            /// Leatherworker
+            /// </summary>
+            LTW = 12,
+
+            /// <summary>
+            /// Weaver
+            /// </summary>
+            WVR = 13,
+
+            /// <summary>
+            /// Alchemist
+            /// </summary>
+            ALC = 14,
+
+            /// <summary>
+            /// Culinarian
+            /// </summary>
+            CUL = 15,
+
+            /// <summary>
+            /// Miner
+            /// </summary>
+            MIN = 16,
+
+            /// <summary>
+            /// Botanist
+            /// </summary>
+            BTN = 17,
+
+            /// <summary>
+            /// Fisher
+            /// </summary>
+            FSH = 18,
+
+            /// <summary>
+            /// Paladin 
+            /// </summary>
+            PLD = 19,
+
+            /// <summary>
+            /// Monk 
+            /// </summary>
+            MNK = 20,
+
+            /// <summary>
+            /// Warrior 
+            /// </summary>
+            WAR = 21,
+
+            /// <summary>
+            /// Dragoon 
+            /// </summary>
+            DRG = 22,
+
+            /// <summary>
+            /// Bard 
+            /// </summary>
+            BRD = 23,
+
+            /// <summary>
+            /// WhiteMage 
+            /// </summary>
+            WHM = 24,
+
+            /// <summary>
+            /// BlackMage
+            /// </summary>
+            BLM = 25,
+
+            /// <summary>
+            /// Arcanist 
+            /// </summary>
+            ACN = 26,
+
+            /// <summary>
+            /// Summoner 
+            /// </summary>
+            SMN = 27,
+
+            /// <summary>
+            /// Scholar 
+            /// </summary>
+            SCH = 28,
+
+            /// <summary>
+            /// Rogue 
+            /// </summary>
+            ROG = 29,
+
+            /// <summary>
+            /// Ninja 
+            /// </summary>
+            NIN = 30,
+
+            /// <summary>
+            /// Machinist 
+            /// </summary>
+            MCH = 31,
+
+            /// <summary>
+            /// DarkKnight 
+            /// </summary>
+            DRK = 32,
+
+            /// <summary>
+            /// Astrologian 
+            /// </summary>
+            AST = 33,
+
+            /// <summary>
+            /// Samurai 
+            /// </summary>
+            SAM = 34,
+
+            /// <summary>
+            /// RedMage 
+            /// </summary>
+            RDM = 35,
+
+            /// <summary>
+            /// BlueMage 
+            /// </summary>
+            BLU = 36,
+
+            /// <summary>
+            /// Gunbreaker 
+            /// </summary>
+            GNB = 37,
+
+            /// <summary>
+            /// Dancer 
+            /// </summary>
+            DNC = 38,
+
+            /// <summary>
+            /// Reaper 
+            /// </summary>
+            RPR = 39,
+
+            /// <summary>
+            /// Sage 
+            /// </summary>
+            SGE = 40,
+
+            /// <summary>
+            /// Viper 
+            /// </summary>
+            VPR = 41,
+
+            /// <summary>
+            /// Pictomancer 
+            /// </summary>
+            PCT = 42,
+        }
+    
     }
     public static class Utilities_Tsing
     {
@@ -2343,6 +2881,11 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             ThornyDeathmatchII = 4467, // 荆棘生死战II
             ThornyDeathmatchIII = 4468, // 荆棘生死战III
             ThornyDeathmatchIV = 4469, // 荆棘生死战IV
+
+            ThornsOfDeathI = 4499, // none->player, extra=0x0 坦克身上可以转移的类型
+            ThornsOfDeathII = 4500, // none->player, extra=0x0
+            ThornsOfDeathIII = 4501, // none->player, extra=0x0
+            ThornsOfDeathIV = 4502, // none->player, extra=0x0
         }
     }
     #endregion
