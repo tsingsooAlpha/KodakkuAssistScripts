@@ -200,7 +200,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
         {
             uint actionId = @event.ActionId;
             ulong bossId = @event.SourceId;
-            long destoryAt = 4000;
+            long destoryAt = 4000 - 700;
             (long, long) delay_destoryAt = new(0, destoryAt);
             float radius_Stick = 12.0f;
             float radius_Machete = 9.0f;
@@ -607,7 +607,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             {
                 return;
             }
-            await Task.Delay(1000); // 等待小怪加入战斗
+            await Task.Delay(2000); // 等待小怪加入战斗
             EX.PlayerRoleEnum myRole = accessory.GetMyRole();
             List<IGameObject> mobs = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BloomingAbomination).ToList();
             Vector3 fieldCenter = @event.SourcePosition.Y > -100 ? DataM7S.P1_FieldCenter : DataM7S.P3_FieldCenter;
