@@ -18,10 +18,10 @@
     {
         "Name": "M7S·阿卡狄亚零式·中量级3",
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2631f",
-        "Version": "0.0.0.6",
+        "Version": "0.0.0.7",
         "Author": "Mao",
         "TerritoryIds": [1261],
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/07-Dawntrail/M7S.cs",
-        "UpdateInfo": "为P3冰花添加了一点默语频道的Log信息输出，用于用户反馈P2P3冰花不绘图的情况"
+        "UpdateInfo": "0.0.0.7: \n  1.尝试修复了启用小怪自动打断后的游戏客户端崩溃问题\n  2.尝试修复了小怪自动打断目标不符合MMW攻略的情况\n  3.添加了小怪自动挑衅，GA-100自动支援减的功能"
     }
 ]
