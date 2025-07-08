@@ -805,7 +805,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
               MT会拉到两只都读条月环的小怪?
             */
 
-            KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.None;
+            KodakkuAssist.Module.GameOperate.MarkType markType = KodakkuAssist.Module.GameOperate.MarkType.Attack1;
             switch (WalkthroughType)
             {
                 case WalkthroughEnum.MMW_SPJP:
