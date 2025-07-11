@@ -18,10 +18,10 @@
     {
         "Name": "M7S·阿卡狄亚零式·中量级3",
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2631f",
-        "Version": "0.0.0.7",
+        "Version": "0.0.0.8",
         "Author": "Mao",
         "TerritoryIds": [1261],
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/07-Dawntrail/M7S.cs",
-        "UpdateInfo": "0.0.0.7: \n  1.尝试修复了启用小怪自动打断后的游戏客户端崩溃问题\n  2.尝试修复了小怪自动打断目标不符合MMW攻略的情况\n  3.添加了小怪自动挑衅，GA-100自动支援减的功能"
+        "UpdateInfo": "0.0.0.8:\n    1.感谢Karlin老师的支持，现在奶妈分摊机制拥有更加直观的指路了\n    2.修正了关闭支援减，实战还会给支援减的bug\n    3.添加了石化安全区强制Imgui的选项\n    4.提前了潜地炮危险区预警\n    5.提前了碎颈冲的危险区预警\n    6.添加了P3孢囊连线组的侧边安全区指路\n    7.添加了P3嘴炮的指路"
     }
 ]
