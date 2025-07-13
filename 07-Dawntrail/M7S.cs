@@ -108,7 +108,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
 
         [UserSetting("特殊项目: P3两轮冰花Debug模式")]
         public bool P3MMWZhuiCheDebug { get; set; } = false;
-        [UserSetting("特殊项目: 石化波动安全区强制使用Imugui绘制")]
+        [UserSetting("特殊项目: 石化波动安全区强制使用Imgui绘制")]
         public bool QuarrySwampSafeZoneImgui { get; set; } = false;
 
 
