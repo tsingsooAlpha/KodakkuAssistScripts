@@ -1108,7 +1108,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             eventCondition: [DataM7S.AbominableBlinkIconId])]
         public void P2_AbominableBlinkDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
-            accessory.FastDraw(DrawTypeEnum.Circle, @event.TargetId, new Vector2(25, 25), new(0, 6400), false);
+            accessory.FastDraw(DrawTypeEnum.Circle, @event.TargetId, new Vector2(25, 25), new(0, 6450), false);
             // 去到BOSS自己的右前方
             Vector3 bossPos = DataM7S.P2_FieldCenter;
             IGameObject bossObj = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).FirstOrDefault();
