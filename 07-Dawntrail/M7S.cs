@@ -24,7 +24,7 @@ using EX = TsingNamespace.Dawntrail.Savage.M7S.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.Dawntrail.Savage.M7S
 {
-    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.8", author: "Mao", note: noteStr)]
+    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.9", author: "Mao", note: noteStr)]
     public class M7S_Script
     {
 
@@ -1108,7 +1108,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             eventCondition: [DataM7S.AbominableBlinkIconId])]
         public void P2_AbominableBlinkDangerousZoneDraw(Event @event, ScriptAccessory accessory)
         {
-            accessory.FastDraw(DrawTypeEnum.Circle, @event.TargetId, new Vector2(25, 25), new(0, 5000), false);
+            accessory.FastDraw(DrawTypeEnum.Circle, @event.TargetId, new Vector2(25, 25), new(0, 6400), false);
             // 去到BOSS自己的右前方
             Vector3 bossPos = DataM7S.P2_FieldCenter;
             IGameObject bossObj = accessory.Data.Objects.GetByDataId((uint)DataM7S.OID.BruteAbombinator).FirstOrDefault();
@@ -1565,7 +1565,7 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
             bool isBossNearWall = @event.SourcePosition.Z < DataM7S.P2_FieldCenter.Z;
             bool isFixedStrangeSeeds = P2StrangeSeedsFixed;
             bool isHintFull = !P2StrangeSeedsSimpleStyle;
-            (long Delay, long DestoryAt) delay_destoryAt = new(0, 3500);
+            (long Delay, long DestoryAt) delay_destoryAt = new(0, 5500);
             if (isFixedStrangeSeeds)
             {
                 // BOSS靠近墙壁的情况
