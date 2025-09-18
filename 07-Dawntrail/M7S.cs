@@ -16,7 +16,6 @@ using KodakkuAssist.Module.Draw.Manager;
 using KodakkuAssist.Script;
 
 using Dalamud.Utility.Numerics;
-using ECommons;
 
 
 using Util = TsingNamespace.Dawntrail.Savage.M7S.Utilities_Tsing;
@@ -24,7 +23,7 @@ using EX = TsingNamespace.Dawntrail.Savage.M7S.ScriptExtensions_Tsing;
 
 namespace TsingNamespace.Dawntrail.Savage.M7S
 {
-    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.0.9", author: "Mao", note: noteStr)]
+    [ScriptType(name: "M7S·阿卡狄亚零式·中量级3", guid: "e3cfc380-edc2-f441-bebe-e9e294f2631f", territorys: [1261], version: "0.0.1.0", author: "Mao", note: noteStr)]
     public class M7S_Script
     {
 
@@ -2816,3 +2815,4 @@ namespace TsingNamespace.Dawntrail.Savage.M7S
     }
     #endregion
 }
+
