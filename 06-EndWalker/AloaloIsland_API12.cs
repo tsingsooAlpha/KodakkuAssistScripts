@@ -31,7 +31,7 @@ using StatusList = Dalamud.Game.ClientState.Statuses.StatusList;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.2", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.1", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
@@ -2676,90 +2676,68 @@ namespace TsingNamespace.AloaloIsland
 
 
 
-        [ScriptMethod(name: "Boss 3 运动会 Boss 3 Surprising Claw Phase", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16484|16492)$"])]
+        // [ScriptMethod(name: "Boss 3 运动会 Boss 3 Surprising Claw Phase", eventType: EventTypeEnum.AddCombatant, eventCondition: ["DataId:regex:^(16484|16492)$"])]
+
+        
+        [ScriptMethod(name: "Boss 3 运动会 Boss 3 Surprising Claw Phase",
+            eventType: EventTypeEnum.Tether,
+            eventCondition: ["Id:regex:^(0011)$"])]
         public async void Boss3_SurprisingClawPhase(Event @event, ScriptAccessory accessory)
         {
-            
-            if(IsInSuppress(10000,nameof(Boss3_SurprisingClawPhase)))
-            {
-                return;
-            }
-            if(await DelayMillisecond(1000))
-            {
-                return;
-            }
 
+            if (@event.TargetId != (ulong)accessory.Data.Me) return;
             accessory.Log.Debug($"Actived! => Boss 3 Surprising Claw Phase");
 
-            
-            
-            uint surprisingClawDataId = @event.GetDataId();
-            //异闻难度的导弹DataId为16482, 零式异闻难度为16490;
-            uint surprisingMissileDataId = surprisingClawDataId == 16484 ? (uint)16482 : (uint)16490;
-            // List<uint> clawPlayers = new List<uint>();
-            // List<uint> missilePlayers = new List<uint>();
             bool isMeGetClaw = false;
             bool isMyObjectAtLeft = false;
-            Vector3 originPos = new (-200,-200,0);
+            Vector3 originPos = new(-200, -200, 0);
 
-            foreach (IGameObject _claw in accessory.GetEntitiesByDataId(surprisingClawDataId))
+            ulong sourceId = @event.SourceId;
+            IGameObject? sourceObj = accessory.Data.Objects.SearchById(sourceId);
+            if (sourceObj is not null)
             {
-                if(_claw.TargetObjectId > 0x10000000)
+                isMeGetClaw = sourceObj.DataId == (uint)0x4064 || sourceObj.DataId == (uint)0x406C;
+                Vector3 _pos = sourceObj.Position;
+                if (boss3_rad_distance.Count > 0)
                 {
-                    if(_claw.TargetObjectId == accessory.Data.Me)
-                    {
-                        isMeGetClaw = true;
-                        Vector3 _pos = Util.RotatePointInFFXIVCoordinate(_claw.Position,originPos, - 0.5f * MathF.PI - boss3_rad_distance[0][0]);
-                        isMyObjectAtLeft = _pos.X < originPos.X;
-                    }
-                    // clawPlayers.Add((uint)_claw.TargetObjectId);
+                    _pos = Util.RotatePointInFFXIVCoordinate(sourceObj.Position, originPos, -0.5f * MathF.PI - boss3_rad_distance[0][0]);
                 }
-            }
-            foreach (IGameObject _missile in accessory.GetEntitiesByDataId(surprisingMissileDataId))
-            {
-                if(_missile.TargetObjectId > 0x10000000)
-                {
-                    if(_missile.TargetObjectId == accessory.Data.Me)
-                    {
-                        Vector3 _pos = Util.RotatePointInFFXIVCoordinate(_missile.Position,originPos,- 0.5f * MathF.PI - boss3_rad_distance[0][0]);
-                        isMyObjectAtLeft = _pos.X < originPos.X;
-                    }
-                    // missilePlayers.Add((uint)_missile.TargetObjectId);
-                }
+                isMyObjectAtLeft = _pos.X < originPos.X;
             }
 
             //模板以1点 -0.25π 为新北点
-            Vector3 claw_startTemplate = new (-200 + 13,-200, -13);
-            Vector3 claw_endTemplate = new (-200 - 13,-200, 13);
-            Vector3 missile_startTemplate = new (-200,-200,0);
-            Vector3 missile_endTemplateLeft = new (-200 - 13 ,-200, -13);
-            Vector3 missile_endTemplateRight = new (-200 + 13 ,-200, 13);
+            Vector3 claw_startTemplate = new(-200 + 13, -200, -13);
+            Vector3 claw_endTemplate = new(-200 - 13, -200, 13);
+            Vector3 missile_startTemplate = new(-200, -200, 0);
+            Vector3 missile_endTemplateLeft = new(-200 - 13, -200, -13);
+            Vector3 missile_endTemplateRight = new(-200 + 13, -200, 13);
 
             //绘制,如果是爪子则添加一个中途导航点
             List<float[]> myPointsList = new List<float[]>();
 
             float _rot = boss3_rad_distance[0][0] + 0.25f * MathF.PI;
             Vector3 _myStartPoint = isMeGetClaw ? claw_startTemplate : missile_startTemplate;
-            Vector3 myStartPoint = Util.RotatePointInFFXIVCoordinate(_myStartPoint,originPos,_rot);
+            Vector3 myStartPoint = Util.RotatePointInFFXIVCoordinate(_myStartPoint, originPos, _rot);
             Vector3 _myEndPoint = isMeGetClaw ? claw_endTemplate : missile_endTemplateLeft;
-            Vector3 myEndPoint = Util.RotatePointInFFXIVCoordinate(_myEndPoint,originPos,_rot);
-            if((!isMeGetClaw)&&isMyObjectAtLeft)
+            Vector3 myEndPoint = Util.RotatePointInFFXIVCoordinate(_myEndPoint, originPos, _rot);
+            if ((!isMeGetClaw) && isMyObjectAtLeft)
             {
                 _myEndPoint = missile_endTemplateRight;
-                myEndPoint =  Util.RotatePointInFFXIVCoordinate(_myEndPoint,originPos,_rot);
+                myEndPoint = Util.RotatePointInFFXIVCoordinate(_myEndPoint, originPos, _rot);
             }
             //添加起始点
-            myPointsList.Add(new float[]{myStartPoint.X,myStartPoint.Y,myStartPoint.Z,0,7500});
+            myPointsList.Add(new float[] { myStartPoint.X, myStartPoint.Y, myStartPoint.Z, 0, 8500 });
             //如果是爪则添加拐点
-            if(isMeGetClaw){
-                myPointsList[0][4] = 3800;
+            if (isMeGetClaw)
+            {
+                myPointsList[0][4] = 4500;
                 //添加拐点
-                Vector3 _point = Util.RotatePointInFFXIVCoordinate(myStartPoint,originPos,isMyObjectAtLeft?0.3f * MathF.PI:-0.3f * MathF.PI);
-                myPointsList.Add(new float[]{_point.X,_point.Y,_point.Z,0,3000});
+                Vector3 _point = Util.RotatePointInFFXIVCoordinate(myStartPoint, originPos, isMyObjectAtLeft ? 0.3f * MathF.PI : -0.3f * MathF.PI);
+                myPointsList.Add(new float[] { _point.X, _point.Y, _point.Z, 0, 3000 });
             }
             //添加结束点
-            myPointsList.Add(new float[]{myEndPoint.X,myEndPoint.Y,myEndPoint.Z,0,4000});
-            MultiDisDraw(myPointsList,accessory);
+            myPointsList.Add(new float[] { myEndPoint.X, myEndPoint.Y, myEndPoint.Z, 0, 4000 });
+            MultiDisDraw(myPointsList, accessory);
             accessory.Log.Debug($"Boss 3 Surprising Claw Phase : my order number in party => {1 + accessory.GetMyIndex()}");
             accessory.Log.Debug($"Boss 3 Surprising Claw Phase :isMeGetClaw => {isMeGetClaw}");
             accessory.Log.Debug($"Boss 3 Surprising Claw Phase :isMyObjectAtLeft => {isMyObjectAtLeft}");
@@ -3468,4 +3446,3 @@ namespace TsingNamespace.AloaloIsland
     }
     #endregion
 }
-
