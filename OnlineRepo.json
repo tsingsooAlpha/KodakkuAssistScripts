@@ -5,7 +5,7 @@
         "Version": "0.0.1.3",
         "Author": "Mao",
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland_API12.cs",
-        "UpdateInfo": "0.0.1.3:\n    修复了BOSS3运动会阶段玩家刷血导致的指路异常的问题"
+        "UpdateInfo": "0.0.1.4:\n    仅完成API14的适配"
     },
     {
         "Name": "M7S·阿卡狄亚零式·中量级3",
