@@ -25,8 +25,8 @@ using Dalamud.Game;
 // using System.Reflection;
 using Util = TsingNamespace.AloaloIsland.TsingUtilities;
 using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
-using Status = Dalamud.Game.ClientState.Statuses.Status;
-using StatusList = Dalamud.Game.ClientState.Statuses.StatusList;
+// using Status = Dalamud.Game.ClientState.Statuses.Status;
+// using StatusList = Dalamud.Game.ClientState.Statuses.StatusList;
 
 namespace TsingNamespace.AloaloIsland
 {
@@ -3446,4 +3446,5 @@ namespace TsingNamespace.AloaloIsland
     }
     #endregion
 }
+
 
