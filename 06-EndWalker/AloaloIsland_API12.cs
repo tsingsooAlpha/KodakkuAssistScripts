@@ -31,7 +31,7 @@ using static TsingNamespace.AloaloIsland.ScriptExtensions_Tsing;
 namespace TsingNamespace.AloaloIsland
 {
 
-    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.4", author: "Mao" ,note: noteStr)]
+    [ScriptType(name: "阿罗阿罗岛绘图+指路", territorys: [1179, 1180], guid: "e3cfc380-edc2-f441-bebe-e9e294f2632a", version: "0.0.1.5", author: "Mao" ,note: noteStr)]
     public class AloaloIslandScript
     {   
         const string noteStr =
@@ -1781,6 +1781,7 @@ namespace TsingNamespace.AloaloIsland
         [ScriptMethod(name: "Boss 2 强制移动面向修正 Boss 2 Calculated Trajectory Towards Round", eventType: EventTypeEnum.StatusAdd, eventCondition: ["StatusID:regex:^(371[5-8])$"])]
         public async void Boss2_CalculatedTrajectoryTowardsRound(Event @event, ScriptAccessory accessory)
         {
+            if(!Boss2_TowardsRound) return;
             if(@event.GetTargetId() != accessory.Data.Me)
             {
                 return;
@@ -3446,6 +3447,7 @@ namespace TsingNamespace.AloaloIsland
     }
     #endregion
 }
+
 
 
 
