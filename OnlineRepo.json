@@ -4,7 +4,7 @@
         "Guid": "e3cfc380-edc2-f441-bebe-e9e294f2632a",
         "Version": "0.0.1.5",
         "Author": "Mao",
-        "TerritoryIds": [ 1179, 1180]
+        "TerritoryIds": [ 1179, 1180],
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/06-EndWalker/AloaloIsland_API12.cs",
         "UpdateInfo": "0.0.1.4:\n    仅完成API14的适配"
     },
