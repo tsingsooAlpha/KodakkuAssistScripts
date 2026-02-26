@@ -12,6 +12,7 @@
         "Guid": "22cfc380-edc2-f441-f9f9-f9f212f2632f",
         "Version": "0.0.0.1",
         "Author": "Mao",
+        "TerritoryIds": [130],
         "DownloadUrl": "https://raw.githubusercontent.com/tsingsooAlpha/KodakkuAssistScripts/main/Normal/LittleLadiesDay2026.cs",
         "UpdateInfo": "0.0.0.1 简单的小工具"
     },
